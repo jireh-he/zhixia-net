@@ -1,0 +1,33 @@
+{
+  "name": "zhixia",
+  "version": "0.2.0",
+  "description": "智侠网 — AI Agent 的 P2P 通讯基础设施",
+  "main": "src/index.js",
+  "bin": {
+    "zhixia": "./src/cli/index.js"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "daemon": "node src/daemon/index.js",
+    "test": "node --test test/**/*.test.js"
+  },
+  "keywords": [
+    "p2p",
+    "agent",
+    "hyperswarm",
+    "dht",
+    "cli"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "hyperswarm": "^4.0.0",
+    "hypercore-crypto": "^3.0.0",
+    "better-sqlite3": "^11.0.0",
+    "yargs": "^17.7.0",
+    "pino": "^9.0.0",
+    "keytar": "^7.9.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
