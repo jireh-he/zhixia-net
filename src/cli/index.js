@@ -15,17 +15,9 @@ const logger = pino({
 
 const cli = new ZhixiaCLI({ logger });
 
-// 优雅退出
-process.on('SIGINT', () => {
-  cli.stop();
-  process.exit(0);
-});
-process.on('SIGTERM', () => {
-  cli.stop();
-  process.exit(0);
-});
+process.on('SIGINT', () => { cli.stop(); process.exit(0); });
+process.on('SIGTERM', () => { cli.stop(); process.exit(0); });
 
-// stdout 只输出 JSON Lines，stderr 输出日志
 function outResult(data) {
   console.log(JSON.stringify({ type: 'result', data }));
 }
@@ -41,26 +33,13 @@ function outError(code, message) {
 yargs(hideBin(process.argv))
   .scriptName('zhixia')
   .usage('$0 <cmd> [args]')
-  .option('yes', {
-    type: 'boolean',
-    default: false,
-    describe: '跳过敏感操作确认'
-  })
-  .option('topic', {
-    type: 'string',
-    describe: '指定 Topic'
-  })
+  .option('yes', { type: 'boolean', default: false, describe: '跳过敏感操作确认' })
+  .option('topic', { type: 'string', describe: '指定 Topic' })
 
-  // join
   .command({
     command: 'join <topic_name>',
     describe: '加入 P2P Topic',
-    builder: (yargs) => {
-      return yargs.positional('topic_name', {
-        describe: 'Topic 名称',
-        type: 'string'
-      });
-    },
+    builder: (yargs) => yargs.positional('topic_name', { describe: 'Topic 名称', type: 'string' }),
     handler: async (argv) => {
       try {
         const result = await cli.join(argv.topic_name, { yes: argv.yes });
@@ -72,7 +51,6 @@ yargs(hideBin(process.argv))
     }
   })
 
-  // leave
   .command({
     command: 'leave',
     describe: '退出当前 Topic',
@@ -87,7 +65,6 @@ yargs(hideBin(process.argv))
     }
   })
 
-  // peers
   .command({
     command: 'peers',
     describe: '列出已连接的 Peer',
@@ -102,15 +79,12 @@ yargs(hideBin(process.argv))
     }
   })
 
-  // send
   .command({
     command: 'send <pubkey> <message>',
     describe: '向指定 Peer 发送文本消息',
-    builder: (yargs) => {
-      return yargs
-        .positional('pubkey', { describe: '目标 Peer 公钥', type: 'string' })
-        .positional('message', { describe: '消息内容', type: 'string' });
-    },
+    builder: (yargs) => yargs
+      .positional('pubkey', { describe: '目标 Peer 公钥', type: 'string' })
+      .positional('message', { describe: '消息内容', type: 'string' }),
     handler: async (argv) => {
       try {
         const result = await cli.send(argv.pubkey, argv.message);
@@ -122,15 +96,12 @@ yargs(hideBin(process.argv))
     }
   })
 
-  // send-file
   .command({
     command: 'send-file <pubkey> <file_path>',
     describe: '向指定 Peer 发送文件',
-    builder: (yargs) => {
-      return yargs
-        .positional('pubkey', { describe: '目标 Peer 公钥', type: 'string' })
-        .positional('file_path', { describe: '本地文件路径', type: 'string' });
-    },
+    builder: (yargs) => yargs
+      .positional('pubkey', { describe: '目标 Peer 公钥', type: 'string' })
+      .positional('file_path', { describe: '本地文件路径', type: 'string' }),
     handler: async (argv) => {
       try {
         const result = await cli.sendFile(argv.pubkey, argv.file_path, { yes: argv.yes });
@@ -142,13 +113,10 @@ yargs(hideBin(process.argv))
     }
   })
 
-  // disconnect
   .command({
     command: 'disconnect <pubkey>',
     describe: '断开指定 Peer',
-    builder: (yargs) => {
-      return yargs.positional('pubkey', { describe: 'Peer 公钥', type: 'string' });
-    },
+    builder: (yargs) => yargs.positional('pubkey', { describe: 'Peer 公钥', type: 'string' }),
     handler: async (argv) => {
       try {
         const result = await cli.disconnect(argv.pubkey);
@@ -160,43 +128,40 @@ yargs(hideBin(process.argv))
     }
   })
 
-  // events
   .command({
     command: 'events',
     describe: '监听 P2P 事件流（前台模式）',
     handler: async () => {
-      cli.on('peer_connect', (payload) => {
-        outEvent('peer_connect', payload);
-      });
-      cli.on('peer_disconnect', (payload) => {
-        outEvent('peer_disconnect', payload);
-      });
-      cli.on('peer_frame', (payload) => {
-        // 这里应该经过 Sanitizer，简化版直接输出
-        outEvent('peer_message', payload);
-      });
-      cli.on('peer_blob', (payload) => {
-        outEvent('peer_blob', payload);
-      });
-      cli.on('peer_error', (payload) => {
-        outEvent('peer_error', payload);
-      });
-
+      // 所有事件已在 ZhixiaCLI._processInboundEvent 中消毒
+      cli.on('peer_connect', (payload) => outEvent('peer_connect', payload));
+      cli.on('peer_disconnect', (payload) => outEvent('peer_disconnect', payload));
+      cli.on('peer_message', (payload) => outEvent('peer_message', payload));
+      cli.on('peer_blob', (payload) => outEvent('peer_blob', payload));
+      cli.on('peer_error', (payload) => outEvent('peer_error', payload));
       await cli.startEvents();
     }
   })
 
-  // doctor
+  .command({
+    command: 'stats',
+    describe: '查看消毒层统计',
+    handler: async () => {
+      const stats = cli.getSanitizerStats();
+      outResult({ sanitizer_stats: stats });
+    }
+  })
+
   .command({
     command: 'doctor',
     describe: '诊断工具',
     handler: async () => {
+      const stats = cli.getSanitizerStats();
       console.error('✓ 智侠网诊断工具');
-      console.error('  版本: 0.2.0');
-      console.error('  Node.js: ' + process.version);
-      console.error('  平台: ' + process.platform);
-      console.error('  数据目录: ' + require('path').join(process.env.HOME, '.zhixia'));
-      outResult({ ok: true, version: '0.2.0', node: process.version, platform: process.platform });
+      console.error(`  版本: 0.2.0`);
+      console.error(`  Node.js: ${process.version}`);
+      console.error(`  平台: ${process.platform}`);
+      console.error(`  消毒层统计: 总处理 ${stats.totalProcessed}, 清洁 ${stats.clean}, 可疑 ${stats.suspicious}, 拦截 ${stats.rejected}`);
+      outResult({ ok: true, version: '0.2.0', node: process.version, platform: process.platform, stats });
     }
   })
 
