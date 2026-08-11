@@ -5,6 +5,8 @@
 const Hyperswarm = require('hyperswarm');
 const crypto = require('hypercore-crypto');
 const { FrameEncoder, FrameDecoder } = require('./frame-protocol');
+const identitySession = require('./identity-session');
+const peerStore = require('../storage/peer-store');
 
 const CONFIG = {
   maxMsgPerSec: 10,
@@ -36,6 +38,11 @@ class ZhixiaDaemon {
       this.peers.clear();
     }
 
+    // v0.3.1.3 加载身份
+    if (!this._identity) {
+      this._identity = await identitySession.load();
+    }
+
     this.swarm = new Hyperswarm({ keyPair: this.keyPair });
     this.topicBuf = crypto.discoveryKey(Buffer.from(topicName, 'utf8'));
 
@@ -48,10 +55,14 @@ class ZhixiaDaemon {
         windowStart: Date.now(),
         msgCount: 0,
         bytesCount: 0,
-        lastSeen: Date.now()
+        lastSeen: Date.now(),
+        identity: null
       };
       this.peers.set(pubHex, peer);
       this.outEvent('peer_connect', { peer_pubkey: pubHex, topic: topicName });
+
+      // v0.3.1.3 发送 identity.hello
+      this._sendHello(pubHex);
 
       const decoder = new FrameDecoder();
       conn.on('data', (chunk) => {
@@ -59,7 +70,12 @@ class ZhixiaDaemon {
           const frames = decoder.feed(chunk);
           for (const frame of frames) {
             if (frame.type === 'json') {
-              this.outEvent('peer_frame', { peer_pubkey: pubHex, frame: frame.data });
+              // v0.3.1.3 拦截 identity.hello
+              if (frame.data && frame.data.type === 'identity.hello') {
+                this._handleHello(pubHex, frame.data);
+              } else {
+                this.outEvent('peer_frame', { peer_pubkey: pubHex, frame: frame.data });
+              }
             } else if (frame.type === 'binary') {
               this.outEvent('peer_blob', { peer_pubkey: pubHex, size: frame.data.length });
             }
@@ -72,6 +88,7 @@ class ZhixiaDaemon {
       });
 
       conn.on('close', () => {
+        if (peer.identity) peerStore.remove(peer.identity.userId);
         this.peers.delete(pubHex);
         this.outEvent('peer_disconnect', { peer_pubkey: pubHex });
       });
@@ -84,6 +101,29 @@ class ZhixiaDaemon {
     });
 
     return { topic_hex: this.topicBuf.toString('hex'), my_pubkey: this.keyPair.publicKey.toString('hex') };
+  }
+
+  // v0.3.1.3 发送身份 hello
+  async _sendHello(pubHex) {
+    try {
+      const hello = await identitySession.introduce();
+      if (hello) this.sendJson(pubHex, hello);
+    } catch (e) {
+      // 无身份不阻塞连接
+    }
+  }
+
+  // v0.3.1.3 接收并验证身份 hello
+  async _handleHello(pubHex, data) {
+    try {
+      const info = await identitySession.accept(data);
+      const peer = this.peers.get(pubHex);
+      if (peer) peer.identity = info;
+      peerStore.update(info);
+      this.outEvent('peer_identity', { peer_pubkey: pubHex, ...info });
+    } catch (e) {
+      this.outEvent('peer_error', { peer_pubkey: pubHex, error: e.message });
+    }
   }
 
   sendFrame(peerPubkey, frameBuffer) {

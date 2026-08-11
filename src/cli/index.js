@@ -4,6 +4,11 @@
 const yargs = require('yargs/yargs');
 const { hideBin } = require('yargs/helpers');
 const { ZhixiaCLI } = require('./commands');
+const bus = require('../core/command-bus');
+
+// 注册身份/资料命令（v0.3.1.2）
+require('./commands/user');
+require('./commands/profile');
 const pino = require('pino');
 
 const logger = pino({
@@ -162,6 +167,84 @@ yargs(hideBin(process.argv))
       console.error(`  平台: ${process.platform}`);
       console.error(`  消毒层统计: 总处理 ${stats.totalProcessed}, 清洁 ${stats.clean}, 可疑 ${stats.suspicious}, 拦截 ${stats.rejected}`);
       outResult({ ok: true, version: '0.2.0', node: process.version, platform: process.platform, stats });
+    }
+  })
+
+  .command({
+    command: 'user:create',
+    describe: '创建新身份（生成 ed25519 密钥对）',
+    handler: async () => {
+      try {
+        const result = await bus.execute({ action: 'user.create' });
+        console.error('✓ User created');
+        outResult({ id: result.id, publicKey: result.publicKey, createdAt: result.createdAt });
+      } catch (e) {
+        outError('CREATE_FAILED', e.message);
+        process.exit(1);
+      }
+    }
+  })
+
+  .command({
+    command: 'user:info',
+    describe: '查看当前身份',
+    handler: async () => {
+      try {
+        const result = await bus.execute({ action: 'user.info' });
+        outResult(result);
+      } catch (e) {
+        outError('INFO_FAILED', e.message);
+        process.exit(1);
+      }
+    }
+  })
+
+  .command({
+    command: 'profile:set',
+    describe: '设置用户资料',
+    builder: (yargs) => yargs
+      .option('name', { type: 'string', describe: '用户名' })
+      .option('description', { type: 'string', describe: '简介' }),
+    handler: async (argv) => {
+      try {
+        const data = {};
+        if (argv.name) data.username = argv.name;
+        if (argv.description) data.description = argv.description;
+        const result = await bus.execute({ action: 'profile.update', data });
+        outResult(result);
+      } catch (e) {
+        outError('PROFILE_SET_FAILED', e.message);
+        process.exit(1);
+      }
+    }
+  })
+
+  .command({
+    command: 'profile:show',
+    describe: '查看用户资料',
+    handler: async () => {
+      try {
+        const result = await bus.execute({ action: 'profile.show' });
+        outResult(result);
+      } catch (e) {
+        outError('PROFILE_SHOW_FAILED', e.message);
+        process.exit(1);
+      }
+    }
+  })
+
+  .command({
+    command: 'network:peers',
+    describe: '查看在线用户身份',
+    handler: async () => {
+      try {
+        const ps = require('../storage/peer-store');
+        const peers = ps.list();
+        outResult({ peers });
+      } catch (e) {
+        outError('PEERS_FAILED', e.message);
+        process.exit(1);
+      }
     }
   })
 

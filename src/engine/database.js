@@ -59,6 +59,14 @@ function initDatabase(dbPath = getDbPath()) {
     );
   `);
 
+  // 身份 Peer 表（v0.3.1.3 Identity ↔ P2P 集成）
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS peers (
+      user_id TEXT PRIMARY KEY, public_key TEXT,
+      capabilities TEXT, last_seen INTEGER
+    );
+  `);
+
   // 投票记录
   db.exec(`
     CREATE TABLE IF NOT EXISTS votes (
