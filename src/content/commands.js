@@ -1,6 +1,8 @@
 // Content: CommandBus 命令注册
 const bus = require('../core/command-bus');
 const manager = require('./manager');
+const sync = require('./sync');
+const provider = require('./provider');
 
 bus.register('content.publish', async (command) => {
   return manager.publish({ owner: command.owner, file: command.file, type: command.type, metadata: command.metadata });
@@ -28,4 +30,17 @@ bus.register('content.share', async (command) => {
 
 bus.register('content.chain', async (command) => {
   return require('./propagation').chain(command.contentId);
+});
+
+bus.register('content.chunks', async (command) => {
+  return manager.chunks(command.contentId);
+});
+
+bus.register('content.providers', async (command) => {
+  return provider.list(command.contentId);
+});
+
+bus.register('content.sync', async (command) => {
+  if (command.transport) sync.setTransport(command.transport);
+  return sync.sync(command.contentId);
 });

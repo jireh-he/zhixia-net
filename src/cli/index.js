@@ -473,6 +473,51 @@ yargs(hideBin(process.argv))
     }
   })
 
+  .command({
+    command: 'content:chunks <cid>',
+    describe: '查看内容的 chunk 分片信息',
+    builder: (yargs) => yargs.positional('cid', { describe: '内容ID', type: 'string' }),
+    handler: async (argv) => {
+      try {
+        const result = await bus.execute({ action: 'content.chunks', contentId: argv.cid });
+        outResult(result);
+      } catch (e) {
+        outError('CONTENT_CHUNKS_FAILED', e.message);
+        process.exit(1);
+      }
+    }
+  })
+
+  .command({
+    command: 'content:providers <cid>',
+    describe: '查看内容的提供者列表',
+    builder: (yargs) => yargs.positional('cid', { describe: '内容ID', type: 'string' }),
+    handler: async (argv) => {
+      try {
+        const result = await bus.execute({ action: 'content.providers', contentId: argv.cid });
+        outResult(result);
+      } catch (e) {
+        outError('CONTENT_PROVIDERS_FAILED', e.message);
+        process.exit(1);
+      }
+    }
+  })
+
+  .command({
+    command: 'content:sync <cid>',
+    describe: '从网络同步内容（下载 chunk + 验证 hash）',
+    builder: (yargs) => yargs.positional('cid', { describe: '内容ID', type: 'string' }),
+    handler: async (argv) => {
+      try {
+        const result = await bus.execute({ action: 'content.sync', contentId: argv.cid });
+        outResult(result);
+      } catch (e) {
+        outError('CONTENT_SYNC_FAILED', e.message);
+        process.exit(1);
+      }
+    }
+  })
+
   .demandCommand(1, '请指定一个命令')
   .strict()
   .help()

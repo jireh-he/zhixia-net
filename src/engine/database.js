@@ -115,6 +115,26 @@ function initDatabase(dbPath = getDbPath()) {
   `);
 
   db.exec(`
+    CREATE TABLE IF NOT EXISTS content_chunks (
+      content_id TEXT NOT NULL, chunk_index INTEGER NOT NULL,
+      hash TEXT NOT NULL, size INTEGER,
+      PRIMARY KEY (content_id, chunk_index)
+    );
+    CREATE INDEX IF NOT EXISTS idx_content_chunks_hash ON content_chunks(hash);
+  `);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS content_providers (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      content_id TEXT NOT NULL, provider_id TEXT NOT NULL,
+      announced_at INTEGER,
+      UNIQUE(content_id, provider_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_content_providers_cid ON content_providers(content_id);
+    CREATE INDEX IF NOT EXISTS idx_content_providers_uid ON content_providers(provider_id);
+  `);
+
+  db.exec(`
     CREATE TABLE IF NOT EXISTS votes (
       vote_id TEXT PRIMARY KEY, topic TEXT, proposal_id TEXT,
       voter_pubkey TEXT, weight REAL, choice TEXT, cast_at INTEGER
