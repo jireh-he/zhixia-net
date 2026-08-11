@@ -208,7 +208,169 @@ CREATE TABLE conversation_members (conversation_id, user_id);
 
 ---
 
-## 七、与当前代码对照
+## 七、v0.3.1 实施设计
+
+### 7.1 目标
+
+把"Node/Agent 身份"升级为"用户身份系统"，完成 5 个 CLI 命令：
+
+```
+zhixia user create    # 生成密钥对 + 注册身份
+zhixia user info      # 显示当前用户信息
+zhixia user export    # 加密导出身份
+zhixia user import    # 从备份恢复身份
+zhixia profile set    # 修改用户名等资料
+```
+
+### 7.2 目录结构
+
+```
+src/
+├── cli/
+│   ├── index.js
+│   ├── commands/        # 按域拆分
+│   │   ├── user.js
+│   │   ├── profile.js
+│   │   └── message.js   # 原有逻辑迁移
+│   └── index.js
+├── daemon/              # 不动
+├── engine/
+│   ├── attestation.js
+│   ├── propagation.js
+│   ├── reputation.js
+│   └── database.js      # 整合到 storage/
+├── identity/
+│   ├── index.js          # 统一入口
+│   ├── manager.js        # 身份业务逻辑
+│   ├── keystore.js       # 密钥生成/加密/存储
+│   ├── profile.js        # 资料管理
+│   └── migrate.js        # 从 agent_cards 迁移
+├── storage/
+│   ├── database.js       # 统一 DB 入口
+│   ├── migration.js      # migration 系统
+│   └── schema/
+│       └── 001_identity.sql
+├── core/
+│   └── command-bus.js    # 命令路由
+└── sanitizer/            # 不动
+```
+
+### 7.3 Identity 核心
+
+```
+zid 生成规则: zid:${SHA256(publicKey).slice(0, 8)}
+```
+
+**身份不变**：改名/换头像/重置密钥都不影响 zid（密钥变则 zid 变 = 新用户，旧身份吊销）
+
+**目录结构**：
+
+```
+~/.zhixia/users/zid:xxxx/
+├── identity.json    -- { id, publicKey, createdAt }
+├── private.key      -- argon2+AES-256-GCM 加密
+└── profile.json     -- { username, avatar, description, tags, updatedAt }
+```
+
+### 7.4 密钥加密方案
+
+**首选（有依赖）**：`argon2` npm 包 + `aes-256-gcm`
+
+**备选（无额外依赖）**：`crypto.pbkdf2` + `crypto.createCipheriv('aes-256-gcm')`
+
+> 建议用**备选方案**，零额外依赖，Node 原生支持。PBKDF2 200000 迭代 + 128-bit salt 足够安全。
+
+加密结构：
+
+```json
+{
+  "encrypted": true,
+  "algorithm": "aes-256-gcm",
+  "kdf": "pbkdf2",
+  "iterations": 200000,
+  "salt": "<hex>",
+  "iv": "<hex>",
+  "data": "<hex>"
+}
+```
+
+### 7.5 Migration 系统
+
+```sql
+-- schema/001_identity.sql
+CREATE TABLE IF NOT EXISTS identities (
+    id TEXT PRIMARY KEY,
+    public_key TEXT UNIQUE NOT NULL,
+    created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS profiles (
+    user_id TEXT PRIMARY KEY,
+    username TEXT,
+    avatar TEXT,
+    description TEXT,
+    tags TEXT,              -- JSON 数组
+    updated_at INTEGER,
+    FOREIGN KEY(user_id) REFERENCES identities(id)
+);
+
+CREATE TABLE IF NOT EXISTS topics (
+    topic_id TEXT PRIMARY KEY,
+    name TEXT,
+    joined_at INTEGER,
+    peers_count INTEGER DEFAULT 0,
+    local_rules TEXT,
+    created_at INTEGER
+);
+```
+
+`migration.js` 负责：
+- 读取当前 DB schema 版本（`integrity_check` 表扩展或新增 `schema_version` 表）
+- 按版本号顺序执行 SQL
+- 幂等（重复执行不报错）
+
+### 7.6 Command Bus 设计
+
+```
+CLI → CommandBus → IdentityManager → Keystore → SQLite
+```
+
+不异步瀑布。Bus 是同步命令路由器，handler 直接执行，不返回 Promise wrapper。
+
+**为什么保留 Bus 而不是直接调 manager**：为未来 AI 调用预留入口——Agent 可以通过 `bus.execute({action: 'user.create'})` 执行命令，无需写 CLI 解析逻辑。
+
+### 7.7 现有代码兼容
+
+| 当前 | 迁移策略 |
+|------|----------|
+| `agent_cards` 表 | **保留双写**，新身份写入 identities + profiles，老代码查询 agent_cards 仍然工作 |
+| `keytar` 存储密钥 | 新身份用外置加密文件，旧逻辑保留 keytar 兼容 |
+| `database.js` 硬编码建表 | 迁移到 `storage/database.js`，原文件作为薄 wrapper 保留兼容 |
+| `commands.js` 扁平命令 | 拆到 `commands/user.js` 等，原文件做导出兼容 |
+
+**兼容期**：v0.3.1 完成后的 1 个版本内，agent_cards 和 keytar 路径双写，v0.4 再清理。
+
+### 7.8 验收标准
+
+```bash
+$ zhixia user create
+# → ~/.zhixia/users/zid:xxxx/{identity.json, private.key, profile.json}
+
+$ zhixia user info
+# → ID / Public Key / Username / Created
+
+$ zhixia profile set username="智侠用户"
+# → profile.json 更新
+
+$ zhixia user export > backup.zip
+$ rm -rf ~/.zhixia/users/zid:xxxx/
+$ zhixia user import < backup.zip
+# → 恢复成功
+```
+
+---
+
+## 八、与当前代码对照
 
 | 设计目标 | 当前状态 | 行动 |
 |----------|----------|------|
