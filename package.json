@@ -20,12 +20,12 @@
   ],
   "license": "MIT",
   "dependencies": {
-    "hyperswarm": "^4.0.0",
-    "hypercore-crypto": "^3.0.0",
     "better-sqlite3": "^11.0.0",
-    "yargs": "^17.7.0",
+    "hypercore-crypto": "^3.0.0",
+    "hyperswarm": "^4.0.0",
+    "keytar": "^7.9.0",
     "pino": "^9.0.0",
-    "keytar": "^7.9.0"
+    "yargs": "^17.7.0"
   },
   "engines": {
     "node": ">=18.0.0"

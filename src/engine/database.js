@@ -1,5 +1,6 @@
 // Layer 2: SQLite Database
-const Database = require('better-sqlite3');
+// 使用 Node 22+ 内置 node:sqlite（零外部 native 依赖）
+const { DatabaseSync } = require('node:sqlite');
 const path = require('path');
 const fs = require('fs');
 
@@ -16,9 +17,9 @@ function ensureDir(dbPath) {
 
 function initDatabase(dbPath = getDbPath()) {
   ensureDir(dbPath);
-  const db = new Database(dbPath);
-  db.pragma('journal_mode = WAL');
-  db.pragma('foreign_keys = ON');
+  const db = new DatabaseSync(dbPath);
+  try { db.exec('PRAGMA journal_mode = WAL'); } catch (e) { /* WAL 可能不支持 */ }
+  try { db.exec('PRAGMA foreign_keys = ON'); } catch (e) { }
 
   // 声誉图（本地观察缓存）
   db.exec(`
@@ -32,7 +33,6 @@ function initDatabase(dbPath = getDbPath()) {
     CREATE INDEX IF NOT EXISTS idx_reputation_topic ON reputation(topic);
   `);
 
-  // 消息元数据日志
   db.exec(`
     CREATE TABLE IF NOT EXISTS message_log (
       msg_id TEXT PRIMARY KEY, peer_pubkey TEXT, topic TEXT,
@@ -42,7 +42,6 @@ function initDatabase(dbPath = getDbPath()) {
     CREATE INDEX IF NOT EXISTS idx_msglog_topic ON message_log(topic);
   `);
 
-  // 威胁日志
   db.exec(`
     CREATE TABLE IF NOT EXISTS threat_log (
       id INTEGER PRIMARY KEY AUTOINCREMENT, peer_pubkey TEXT,
@@ -51,7 +50,6 @@ function initDatabase(dbPath = getDbPath()) {
     CREATE INDEX IF NOT EXISTS idx_threat_peer ON threat_log(peer_pubkey);
   `);
 
-  // Agent 名片
   db.exec(`
     CREATE TABLE IF NOT EXISTS agent_cards (
       pubkey TEXT PRIMARY KEY, name TEXT, capabilities TEXT,
@@ -59,7 +57,6 @@ function initDatabase(dbPath = getDbPath()) {
     );
   `);
 
-  // 身份 Peer 表（v0.3.1.3 Identity ↔ P2P 集成）
   db.exec(`
     CREATE TABLE IF NOT EXISTS peers (
       user_id TEXT PRIMARY KEY, public_key TEXT,
@@ -67,7 +64,17 @@ function initDatabase(dbPath = getDbPath()) {
     );
   `);
 
-  // 投票记录
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS messages (
+      id TEXT PRIMARY KEY, sender TEXT NOT NULL,
+      receiver TEXT NOT NULL, type TEXT NOT NULL,
+      payload TEXT NOT NULL, signature TEXT,
+      status TEXT DEFAULT 'pending', created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_msg_receiver ON messages(receiver);
+    CREATE INDEX IF NOT EXISTS idx_msg_sender ON messages(sender);
+  `);
+
   db.exec(`
     CREATE TABLE IF NOT EXISTS votes (
       vote_id TEXT PRIMARY KEY, topic TEXT, proposal_id TEXT,
@@ -76,7 +83,6 @@ function initDatabase(dbPath = getDbPath()) {
     CREATE INDEX IF NOT EXISTS idx_votes_proposal ON votes(proposal_id);
   `);
 
-  // 审计日志
   db.exec(`
     CREATE TABLE IF NOT EXISTS audit_log (
       id INTEGER PRIMARY KEY AUTOINCREMENT, timestamp INTEGER,
@@ -85,7 +91,6 @@ function initDatabase(dbPath = getDbPath()) {
     );
   `);
 
-  // 声誉证明表
   db.exec(`
     CREATE TABLE IF NOT EXISTS attestations (
       attestation_id TEXT PRIMARY KEY,
@@ -94,13 +99,12 @@ function initDatabase(dbPath = getDbPath()) {
       collaboration REAL, civility REAL,
       issued_at INTEGER, expires_at INTEGER,
       signature TEXT NOT NULL, raw_json TEXT,
-      received_at INTEGER DEFAULT (strftime('%s','now') * 1000)
+      received_at INTEGER DEFAULT 0
     );
     CREATE INDEX IF NOT EXISTS idx_attest_target ON attestations(target_pubkey);
     CREATE INDEX IF NOT EXISTS idx_attest_issuer ON attestations(issuer_pubkey);
   `);
 
-  // ====== 新增：传播奖励表 ======
   db.exec(`
     CREATE TABLE IF NOT EXISTS propagation_rewards (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -119,7 +123,6 @@ function initDatabase(dbPath = getDbPath()) {
     CREATE INDEX IF NOT EXISTS idx_prop_topic ON propagation_rewards(topic);
   `);
 
-  // 完整性校验表
   db.exec(`
     CREATE TABLE IF NOT EXISTS integrity_check (
       id INTEGER PRIMARY KEY CHECK (id = 1),

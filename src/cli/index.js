@@ -9,14 +9,11 @@ const bus = require('../core/command-bus');
 // 注册身份/资料命令（v0.3.1.2）
 require('./commands/user');
 require('./commands/profile');
+// 注册通讯层命令（v0.3.2）
+require('../communication/commands');
 const pino = require('pino');
 
-const logger = pino({
-  level: process.env.LOG_LEVEL || 'info',
-  transport: process.env.NODE_ENV !== 'production'
-    ? { target: 'pino-pretty', options: { colorize: true } }
-    : undefined
-});
+const logger = pino({ level: process.env.LOG_LEVEL || 'info' });
 
 const cli = new ZhixiaCLI({ logger });
 
@@ -243,6 +240,86 @@ yargs(hideBin(process.argv))
         outResult({ peers });
       } catch (e) {
         outError('PEERS_FAILED', e.message);
+        process.exit(1);
+      }
+    }
+  })
+
+  .command({
+    command: 'message:send <to> <text>',
+    describe: '发送消息给用户（通过P2P传输）',
+    builder: (yargs) => yargs
+      .positional('to', { describe: '目标用户 zid', type: 'string' })
+      .positional('text', { describe: '消息内容', type: 'string' }),
+    handler: async (argv) => {
+      try {
+        const transport = require('../communication/transport');
+        // 注入 sender: 通过 daemon send_json
+        transport.setSender(async (frame) => {
+          const result = await cli.sendCmd('send_json', {
+            peer_pubkey: frame.peer_pubkey,
+            payload: frame.payload
+          });
+          return result;
+        });
+        // 注入 zid → pubkey 查找
+        transport.setLookup(async (zid) => {
+          const result = await cli.sendCmd('find_peer_by_zid', { zid });
+          return result && result.peer_pubkey ? result.peer_pubkey : null;
+        });
+
+        const result = await bus.execute({ action: 'message.create', to: argv.to, text: argv.text });
+        if (!result.send.ok) {
+          console.error('[MSG] sent offline, saved as pending. Will retry when user comes online.');
+        }
+        outResult(result);
+      } catch (e) {
+        outError('MSG_SEND_FAILED', e.message);
+        process.exit(1);
+      }
+    }
+  })
+
+  .command({
+    command: 'message:history',
+    describe: '查看所有消息历史',
+    builder: (yargs) => yargs.option('limit', { type: 'number', default: 50 }),
+    handler: async (argv) => {
+      try {
+        const result = await bus.execute({ action: 'message.history', limit: argv.limit });
+        outResult(result);
+      } catch (e) {
+        outError('MSG_HISTORY_FAILED', e.message);
+        process.exit(1);
+      }
+    }
+  })
+
+  .command({
+    command: 'message:inbox',
+    describe: '查看收件箱',
+    builder: (yargs) => yargs.option('limit', { type: 'number', default: 50 }),
+    handler: async (argv) => {
+      try {
+        const result = await bus.execute({ action: 'message.inbox', limit: argv.limit });
+        outResult(result);
+      } catch (e) {
+        outError('MSG_INBOX_FAILED', e.message);
+        process.exit(1);
+      }
+    }
+  })
+
+  .command({
+    command: 'message:outbox',
+    describe: '查看发送箱',
+    builder: (yargs) => yargs.option('limit', { type: 'number', default: 50 }),
+    handler: async (argv) => {
+      try {
+        const result = await bus.execute({ action: 'message.outbox', limit: argv.limit });
+        outResult(result);
+      } catch (e) {
+        outError('MSG_OUTBOX_FAILED', e.message);
         process.exit(1);
       }
     }

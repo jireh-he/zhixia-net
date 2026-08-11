@@ -7,6 +7,7 @@ const crypto = require('hypercore-crypto');
 const { FrameEncoder, FrameDecoder } = require('./frame-protocol');
 const identitySession = require('./identity-session');
 const peerStore = require('../storage/peer-store');
+const msgReceiver = require('../communication/receiver');
 
 const CONFIG = {
   maxMsgPerSec: 10,
@@ -18,9 +19,10 @@ class ZhixiaDaemon {
   constructor() {
     this.swarm = null;
     this.topicBuf = null;
-    this.peers = new Map(); // pubkeyHex -> { conn, windowStart, msgCount, bytesCount, lastSeen }
+    this.peers = new Map(); // pubkeyHex -> { conn, windowStart, msgCount, bytesCount, lastSeen, identity }
     this.keyPair = crypto.keyPair();
     this.decoder = new FrameDecoder();
+    this.selfIdentity = null;
   }
 
   // 输出到 stdout（JSON Lines，给上层消费）
@@ -73,7 +75,13 @@ class ZhixiaDaemon {
               // v0.3.1.3 拦截 identity.hello
               if (frame.data && frame.data.type === 'identity.hello') {
                 this._handleHello(pubHex, frame.data);
-              } else {
+              }
+              // v0.3.2.1 拦截 message.send
+              else if (frame.data && frame.data.type === 'message.send') {
+                this._handleMessage(pubHex, frame.data);
+              }
+              // 普通 peer_frame
+              else {
                 this.outEvent('peer_frame', { peer_pubkey: pubHex, frame: frame.data });
               }
             } else if (frame.type === 'binary') {
@@ -121,6 +129,16 @@ class ZhixiaDaemon {
       if (peer) peer.identity = info;
       peerStore.update(info);
       this.outEvent('peer_identity', { peer_pubkey: pubHex, ...info });
+    } catch (e) {
+      this.outEvent('peer_error', { peer_pubkey: pubHex, error: e.message });
+    }
+  }
+
+  // v0.3.2.1 接收消息
+  async _handleMessage(pubHex, data) {
+    try {
+      const result = await msgReceiver.receive(data, pubHex);
+      this.outEvent('msg_received', { peer_pubkey: pubHex, ...result, msg: data.payload });
     } catch (e) {
       this.outEvent('peer_error', { peer_pubkey: pubHex, error: e.message });
     }
@@ -179,6 +197,16 @@ class ZhixiaDaemon {
   listPeers() {
     return { peers: [...this.peers.keys()] };
   }
+
+  // v0.3.2.1 通过 zid 查找在线 peer 的 pubkey
+  findPeerByZid(zid) {
+    for (const [pubkey, peer] of this.peers) {
+      if (peer.identity && peer.identity.userId === zid) {
+        return { ok: true, peer_pubkey: pubkey, userId: zid };
+      }
+    }
+    return null;
+  }
 }
 
 // ========== stdin 命令路由 ==========
@@ -214,6 +242,11 @@ async function handleCommand(cmd) {
       case 'list_peers':
         daemon.outResult(id, daemon.listPeers());
         break;
+      case 'find_peer_by_zid': {
+        const peer = daemon.findPeerByZid(cmd.zid);
+        daemon.outResult(id, peer || { ok: false, err: 'User not connected' });
+        break;
+      }
       case 'send_json': {
         const res = daemon.sendJson(cmd.peer_pubkey, cmd.payload);
         daemon.outResult(id, res);
