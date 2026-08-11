@@ -13,6 +13,8 @@ require('./commands/profile');
 require('../communication/commands');
 // 注册内容层命令（v0.3.3）
 require('../content/commands');
+// 注册信任层命令（v0.4.0）
+require('../trust/commands');
 const pino = require('pino');
 
 const logger = pino({ level: process.env.LOG_LEVEL || 'info' });
@@ -513,6 +515,64 @@ yargs(hideBin(process.argv))
         outResult(result);
       } catch (e) {
         outError('CONTENT_SYNC_FAILED', e.message);
+        process.exit(1);
+      }
+    }
+  })
+
+  .command({
+    command: 'trust:rate <target>',
+    describe: '评价用户（不可自改，签名记录）',
+    builder: (yargs) => yargs
+      .positional('target', { describe: '被评价用户 zid', type: 'string' })
+      .option('type', { type: 'string', describe: '评价类型 (content_quality/network_contribution/activity)' })
+      .option('value', { type: 'number', describe: '评价分值' })
+      .option('evidence', { type: 'string', describe: '证据 (CID)' })
+      .option('subject', { type: 'string', describe: '评价对象' }),
+    handler: async (argv) => {
+      try {
+        let from;
+        try { from = (await require('../identity/manager').info()).id; } catch { from = 'zid:unknown'; }
+        const result = await bus.execute({
+          action: 'trust.rate',
+          from, target: argv.target,
+          subject: argv.subject || null,
+          type: argv.type || 'content_quality',
+          value: argv.value, evidence: argv.evidence || null
+        });
+        outResult(result);
+      } catch (e) {
+        outError('TRUST_RATE_FAILED', e.message);
+        process.exit(1);
+      }
+    }
+  })
+
+  .command({
+    command: 'trust:show <userId>',
+    describe: '查看用户信誉分',
+    builder: (yargs) => yargs.positional('userId', { describe: '用户 zid', type: 'string' }),
+    handler: async (argv) => {
+      try {
+        const result = await bus.execute({ action: 'trust.show', userId: argv.userId });
+        outResult(result);
+      } catch (e) {
+        outError('TRUST_SHOW_FAILED', e.message);
+        process.exit(1);
+      }
+    }
+  })
+
+  .command({
+    command: 'trust:evidence <target>',
+    describe: '查看用户评价证据',
+    builder: (yargs) => yargs.positional('target', { describe: '被评价用户 zid', type: 'string' }),
+    handler: async (argv) => {
+      try {
+        const result = await bus.execute({ action: 'trust.evidence', target: argv.target });
+        outResult(result);
+      } catch (e) {
+        outError('TRUST_EVIDENCE_FAILED', e.message);
         process.exit(1);
       }
     }

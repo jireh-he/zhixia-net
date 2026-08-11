@@ -143,6 +143,24 @@ function initDatabase(dbPath = getDbPath()) {
   `);
 
   db.exec(`
+    CREATE TABLE IF NOT EXISTS trust_attestations (
+      id TEXT PRIMARY KEY, from_user TEXT NOT NULL, target_user TEXT NOT NULL,
+      subject TEXT, type TEXT, value REAL,
+      evidence TEXT, signature TEXT, created_at INTEGER
+    );
+    CREATE INDEX IF NOT EXISTS idx_trust_attest_target ON trust_attestations(target_user);
+    CREATE INDEX IF NOT EXISTS idx_trust_attest_from ON trust_attestations(from_user);
+  `);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS trust_scores (
+      user_id TEXT PRIMARY KEY,
+      content_score REAL DEFAULT 0, network_score REAL DEFAULT 0, activity_score REAL DEFAULT 0,
+      total_score REAL DEFAULT 0, calculated_at INTEGER
+    );
+  `);
+
+  db.exec(`
     CREATE TABLE IF NOT EXISTS audit_log (
       id INTEGER PRIMARY KEY AUTOINCREMENT, timestamp INTEGER,
       actor TEXT, command TEXT, params TEXT, result TEXT,
