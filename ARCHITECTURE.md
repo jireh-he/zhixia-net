@@ -629,7 +629,41 @@ hermes.onEvent("peer_message", (payload) => {
 
 ---
 
-## 八、总结
+## 八、v0.3 数据模型规划
+
+> 详细设计见 [`DESIGN_PLAN.md`](./DESIGN_PLAN.md)
+
+### 8.1 核心变化
+
+| 变化 | 现状 (v0.2) | 目标 (v0.3) |
+|------|-------------|-------------|
+| 身份 | `agent_cards` 混合身份+资料 | `identities` (zid, 不变) + `profiles` (可变) 分离 |
+| 密钥 | `keytar` 系统级存储，不可迁移 | `~/.zhixia/users/zid/` 外置加密，支持 export/import |
+| 内容层 | 无 | `contents` + `content_versions`（Git 式版本树） |
+| 江湖 | Topic 仅存在于 DHT 内存 | `topics` 表持久化，绑定本地策略 |
+| 声誉 | 正确方向（attestation 他证） | v0.3.3 完善实时聚合计算 |
+| CLI | 扁平命令 | 分组：user/profile/message/content/trust |
+| DB | 硬编码建表 | 引入 migration 系统，支持版本演进 |
+
+### 8.2 核心域关系
+
+```
+Topics (江湖) → Identity → Profile
+                    ├──→ Content → Propagation (DAG)
+                    ├──→ Attestations → Reputation (实时计算)
+                    └──→ Messages (点对点/广播)
+```
+
+### 8.3 关键设计决策
+
+- **声誉不存表**：`attestations` 是事实，score 必须实时计算，不能缓存当事实
+- **Topic 是第一公民**：所有声誉/传播/治理都绑定 topic，不能跨江湖混淆
+- **不设计 conversations**：P2P 广播模型，无传统会话概念
+- **版本树不可变**：content 的每次修改生成新版本，旧版本永远可追溯
+
+---
+
+## 九、总结
 
 智侠网不运行 AI，但**决定了 AI 能看到什么**。
 
