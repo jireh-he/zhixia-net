@@ -74,6 +74,52 @@ class MessageManager {
   savePending(msg) {
     msgStore.save({ ...msg, status: 'pending' });
   }
+
+  // v0.3.2.2 端到端加密消息
+  async secureSend({ to, text, secret }) {
+    if (!secret) throw new Error('shared secret required for E2E encryption');
+
+    const self = await this._loadSelf();
+    const plain = {
+      id: 'msg:' + require('crypto').randomBytes(4).toString('hex'),
+      from: self.identity.id, to, type: 'text', payload: { text }, createdAt: Date.now()
+    };
+
+    const secure = require('./secure-message');
+    let sealed = secure.encrypt(plain, secret);
+    sealed = secure.sign(sealed, self.privateKey);
+    sealed.status = 'sent';
+
+    msgStore.save({
+      id: sealed.id || sealed.from + ':' + sealed.createdAt,
+      from: sealed.from, to: sealed.to,
+      type: 'secure.text',
+      payload: JSON.stringify(sealed.payload),
+      signature: sealed.signature,
+      status: 'sent',
+      createdAt: sealed.createdAt
+    });
+
+    return sealed;
+  }
+
+  async secureReceive(secureMsg, secret) {
+    const resolved = await identityResolver.resolve(secureMsg.from);
+    if (!resolved) return { ok: false, err: 'sender not found' };
+    if (!require('./secure-message').verify(secureMsg, resolved.publicKey)) {
+      return { ok: false, err: 'signature invalid' };
+    }
+    const plain = require('./secure-message').decrypt(secureMsg, secret);
+    msgStore.save({
+      id: plain.id || secureMsg.from + ':' + secureMsg.createdAt,
+      from: plain.from, to: plain.to,
+      type: plain.type, payload: JSON.stringify(plain.payload),
+      signature: secureMsg.signature,
+      status: 'received',
+      createdAt: plain.createdAt || secureMsg.createdAt
+    });
+    return { ok: true, message: plain };
+  }
 }
 
 module.exports = new MessageManager();

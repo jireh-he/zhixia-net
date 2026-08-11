@@ -75,6 +75,45 @@ function initDatabase(dbPath = getDbPath()) {
     CREATE INDEX IF NOT EXISTS idx_msg_sender ON messages(sender);
   `);
 
+  // 离线消息队列（v0.3.2.2 端到端加密 + Relay）
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS message_queue (
+      id TEXT PRIMARY KEY, receiver TEXT,
+      payload TEXT, created_at INTEGER, expire_at INTEGER
+    );
+    CREATE INDEX IF NOT EXISTS idx_queue_receiver ON message_queue(receiver);
+    CREATE INDEX IF NOT EXISTS idx_queue_expire ON message_queue(expire_at);
+  `);
+
+  // 加密密钥交换缓存（v0.3.2.2）
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS key_exchange_cache (
+      peer_id TEXT PRIMARY KEY, shared_secret TEXT,
+      peer_x25519_pub TEXT, derived_at INTEGER
+    );
+  `);
+
+  // 内容对象注册表（v0.3.3 Content Layer）
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS contents (
+      id TEXT PRIMARY KEY, owner TEXT,
+      hash TEXT, type TEXT, metadata TEXT,
+      created_at INTEGER
+    );
+    CREATE INDEX IF NOT EXISTS idx_contents_owner ON contents(owner);
+  `);
+
+  // 内容传播链（v0.3.3 Content Graph → Trust System 基础）
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS content_propagation (
+      id TEXT PRIMARY KEY, content_id TEXT,
+      from_user TEXT, to_user TEXT,
+      action TEXT, created_at INTEGER
+    );
+    CREATE INDEX IF NOT EXISTS idx_content_prop_content ON content_propagation(content_id);
+    CREATE INDEX IF NOT EXISTS idx_content_prop_user ON content_propagation(from_user);
+  `);
+
   db.exec(`
     CREATE TABLE IF NOT EXISTS votes (
       vote_id TEXT PRIMARY KEY, topic TEXT, proposal_id TEXT,

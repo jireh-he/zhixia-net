@@ -11,6 +11,8 @@ require('./commands/user');
 require('./commands/profile');
 // 注册通讯层命令（v0.3.2）
 require('../communication/commands');
+// 注册内容层命令（v0.3.3）
+require('../content/commands');
 const pino = require('pino');
 
 const logger = pino({ level: process.env.LOG_LEVEL || 'info' });
@@ -320,6 +322,152 @@ yargs(hideBin(process.argv))
         outResult(result);
       } catch (e) {
         outError('MSG_OUTBOX_FAILED', e.message);
+        process.exit(1);
+      }
+    }
+  })
+
+  .command({
+    command: 'security:status',
+    describe: '查看安全状态',
+    handler: async () => {
+      try {
+        const result = await bus.execute({ action: 'security.status' });
+        outResult(result);
+      } catch (e) {
+        outError('SEC_STATUS_FAILED', e.message);
+        process.exit(1);
+      }
+    }
+  })
+
+  .command({
+    command: 'key:exchange',
+    describe: '生成或交换 X25519 加密密钥',
+    builder: (yargs) => yargs
+      .option('peerPub', { type: 'string', describe: '对方 X25519 公钥(PEM)' })
+      .option('secret', { type: 'string', describe: '直接提供共享密钥(hex)' }),
+    handler: async (argv) => {
+      try {
+        const result = await bus.execute({ action: 'key.exchange', peerPublicKey: argv.peerPub, secret: argv.secret });
+        outResult(result);
+      } catch (e) {
+        outError('KEY_EXCHANGE_FAILED', e.message);
+        process.exit(1);
+      }
+    }
+  })
+
+  .command({
+    command: 'message:secure <to> <text>',
+    describe: '发送端到端加密消息',
+    builder: (yargs) => yargs
+      .positional('to', { describe: '目标用户 zid', type: 'string' })
+      .positional('text', { describe: '消息内容', type: 'string' })
+      .option('secret', { type: 'string', describe: '共享密钥(hex)', demandOption: true }),
+    handler: async (argv) => {
+      try {
+        const result = await bus.execute({
+          action: 'message.secureSend',
+          to: argv.to, text: argv.text, secret: argv.secret
+        });
+        outResult(result);
+      } catch (e) {
+        outError('MSG_SECURE_FAILED', e.message);
+        process.exit(1);
+      }
+    }
+  })
+
+  .command({
+    command: 'content:publish <file>',
+    describe: '发布内容到本地仓库',
+    builder: (yargs) => yargs
+      .positional('file', { describe: '文件路径', type: 'string' })
+      .option('owner', { type: 'string', describe: '发布者 zid' })
+      .option('type', { type: 'string', describe: '内容类型' })
+      .option('title', { type: 'string', describe: '标题' }),
+    handler: async (argv) => {
+      try {
+        let owner = argv.owner;
+        if (!owner) {
+          const imgr = require('../identity/manager');
+          const self = await imgr.info();
+          owner = self.id;
+        }
+        const result = await bus.execute({
+          action: 'content.publish', file: argv.file, owner, type: argv.type,
+          metadata: argv.title ? { title: argv.title } : {}
+        });
+        outResult(result);
+      } catch (e) {
+        outError('CONTENT_PUBLISH_FAILED', e.message);
+        process.exit(1);
+      }
+    }
+  })
+
+  .command({
+    command: 'content:show <cid>',
+    describe: '查看内容详情',
+    builder: (yargs) => yargs.positional('cid', { describe: '内容ID', type: 'string' }),
+    handler: async (argv) => {
+      try {
+        const result = await bus.execute({ action: 'content.show', id: argv.cid });
+        outResult(result);
+      } catch (e) {
+        outError('CONTENT_SHOW_FAILED', e.message);
+        process.exit(1);
+      }
+    }
+  })
+
+  .command({
+    command: 'content:list',
+    describe: '列出已发布内容',
+    builder: (yargs) => yargs.option('owner', { type: 'string', describe: '按所有者筛选' }),
+    handler: async (argv) => {
+      try {
+        const result = await bus.execute({ action: 'content.list', owner: argv.owner });
+        outResult(result);
+      } catch (e) {
+        outError('CONTENT_LIST_FAILED', e.message);
+        process.exit(1);
+      }
+    }
+  })
+
+  .command({
+    command: 'content:share <cid>',
+    describe: '分享/转发内容',
+    builder: (yargs) => yargs
+      .positional('cid', { describe: '内容ID', type: 'string' })
+      .option('to', { type: 'string', describe: '分享对象 zid' }),
+    handler: async (argv) => {
+      try {
+        let self;
+        try { self = await require('../identity/manager').info(); } catch { self = { id: 'zid:unknown' }; }
+        const result = await bus.execute({
+          action: 'content.share', contentId: argv.cid, from: self.id, to: argv.to || null
+        });
+        outResult(result);
+      } catch (e) {
+        outError('CONTENT_SHARE_FAILED', e.message);
+        process.exit(1);
+      }
+    }
+  })
+
+  .command({
+    command: 'content:chain <cid>',
+    describe: '查看内容传播链',
+    builder: (yargs) => yargs.positional('cid', { describe: '内容ID', type: 'string' }),
+    handler: async (argv) => {
+      try {
+        const result = await bus.execute({ action: 'content.chain', contentId: argv.cid });
+        outResult(result);
+      } catch (e) {
+        outError('CONTENT_CHAIN_FAILED', e.message);
         process.exit(1);
       }
     }

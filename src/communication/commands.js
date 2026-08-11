@@ -58,3 +58,53 @@ bus.register('transport.setLookup', async (command) => {
   transport.setLookup(command.lookupFn);
   return { ok: true };
 });
+
+// v0.3.2.2 端到端加密
+bus.register('message.secureSend', async (command) => {
+  return manager.secureSend({ to: command.to, text: command.text, secret: command.secret });
+});
+
+bus.register('message.secureReceive', async (command) => {
+  return manager.secureReceive(command.msg, command.secret);
+});
+
+bus.register('key.exchange', async (command) => {
+  const kex = require('./crypto/key-exchange');
+  if (command.peerPublicKey) {
+    const secret = kex.derive(command.privateKey, command.peerPublicKey);
+    return { ok: true, sharedSecret: secret.toString('hex') };
+  }
+  const pair = kex.generate();
+  return { ok: true, privateKey: pair.privateKey, publicKey: pair.publicKey };
+});
+
+bus.register('relay.push', async (command) => {
+  const queue = require('./relay/queue');
+  queue.push(command.secureMsg, command.expireMinutes || 60);
+  return { ok: true };
+});
+
+bus.register('relay.pull', async (command) => {
+  const queue = require('./relay/queue');
+  return queue.pull(command.userId);
+});
+
+bus.register('security.status', async () => {
+  const fs = require('fs/promises');
+  const path = require('path');
+  const home = path.join(process.env.HOME || process.env.USERPROFILE, '.zhixia/users');
+  let hasIdentity = false;
+  try { await fs.readdir(home); hasIdentity = true; } catch { }
+
+  const { initDatabase } = require('../engine/database');
+  const db = initDatabase();
+  const hasQueue = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='message_queue'").get();
+  const hasKeyCache = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='key_exchange_cache'").get();
+
+  return {
+    identity: { ok: hasIdentity },
+    encryption: 'X25519 + AES-256-GCM',
+    message: 'End-to-end encrypted',
+    relay: { queue: !!hasQueue, keyCache: !!hasKeyCache, enabled: true }
+  };
+});
