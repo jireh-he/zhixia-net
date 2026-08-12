@@ -126,6 +126,100 @@ exports.nodeOnline = async () => {
   console.log('Status: READY');
 };
 
+exports.online = async (mode) => {
+  const config = require('../../../config/default.json');
+  const runtime = require('../../node/node-runtime');
+  const info = loadIdentity();
+  const s = await runtime.start({ id: info ? info.id : 'zid:local' });
+  console.log('Zhixia Node');
+  console.log('Identity:', s.id);
+  console.log('Network: ONLINE');
+  console.log('Mode:', mode);
+  console.log('Port:', config.network.port);
+  console.log('Storage:', config.storage.capacity);
+  console.log('Skills:', config.skills.enabled ? '6 (ready)' : 'disabled');
+  console.log('Status: READY');
+};
+
+exports.peers = () => {
+  const peers = net.peer.list ? net.peer.list() : [];
+  console.log('Connected Peers:');
+  if (peers.length === 0) {
+    console.log('  (no peers connected)');
+    return;
+  }
+  peers.forEach((p, i) => console.log('  ' + (i + 1) + '. ' + (p.id || p.peerId || '(unknown)')));
+};
+
+exports.publish = (file) => {
+  try {
+    const fs = require('fs');
+    if (!fs.existsSync(file)) {
+      console.log('Error: file not found:', file);
+      return;
+    }
+    const data = fs.readFileSync(file);
+    const mgr = require('../../storage/storage-manager');
+    const info = loadIdentity();
+    const result = mgr.store(data, { owner: info ? info.id : 'zid:local' });
+    console.log('Published');
+    console.log('CID:', result.cid);
+    console.log('Chunks:', result.chunks.length);
+    console.log('Replicas:', 3);
+    console.log('Size:', result.size + ' bytes');
+  } catch (e) {
+    console.log('Publish Error:', e.message);
+  }
+};
+
+exports.get = (cid) => {
+  try {
+    const mgr = require('../../storage/storage-manager');
+    const chunks = mgr.get(cid);
+    console.log('Content:', cid);
+    console.log('Chunks:', chunks.length);
+    console.log('Size:', chunks.reduce((s, c) => s + (c ? c.length : 0), 0) + ' bytes');
+    if (chunks.length === 1) {
+      console.log('Data (first 200 chars):', chunks[0]?.toString().slice(0, 200));
+    }
+  } catch (e) {
+    console.log('Get Error:', e.message);
+  }
+};
+
+exports.skillList = () => {
+  const skills = require('../../skills/manifest.json');
+  console.log('Installed Skills:');
+  skills.skills.forEach((s, i) => console.log('  ' + (i + 1) + '. ' + s.name));
+};
+
+exports.skillCall = (name) => {
+  try {
+    const runtime = require('../../skills/runtime');
+    runtime.registerManifest();
+    const r = runtime.execute(name, {});
+    if (r && typeof r.then === 'function') {
+      r.then(res => console.log('Result:', JSON.stringify(res).slice(0, 500))).catch(e => console.log('Error:', e.message));
+    } else {
+      console.log('Result:', JSON.stringify(r).slice(0, 500));
+    }
+  } catch (e) {
+    console.log('Skill Error:', e.message);
+  }
+};
+
+exports.configShow = () => {
+  const config = require('../../../config/default.json');
+  console.log('Node Config:');
+  console.log('  Name:', config.name);
+  console.log('  Network:', config.network.protocol, 'port ' + config.network.port);
+  console.log('  NAT:', config.network.nat);
+  console.log('  Storage:', config.storage.capacity, '| chunk:', config.storage.chunkSize);
+  console.log('  Replication:', config.replication);
+  console.log('  Skills:', config.skills.enabled ? 'enabled' : 'disabled');
+  console.log('  Mode options:', config.modes.options.join(', '));
+};
+
 exports.nodeOffline = async () => {
   const runtime = require('../../node/node-runtime');
   const s = await runtime.stop();

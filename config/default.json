@@ -1,0 +1,23 @@
+{
+  "name": "zhixia-node",
+  "version": "2.1.0",
+  "network": {
+    "port": 9000,
+    "protocol": "p2p",
+    "nat": "auto",
+    "bootstrap": []
+  },
+  "storage": {
+    "capacity": "100GB",
+    "chunkSize": "1MB"
+  },
+  "replication": 3,
+  "skills": {
+    "enabled": true,
+    "port": 8080
+  },
+  "modes": {
+    "default": "normal",
+    "options": ["normal", "storage", "relay"]
+  }
+}

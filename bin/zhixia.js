@@ -59,5 +59,34 @@ yargs(hideBin(process.argv))
     () => statusCmd.status()
   )
 
+  .command({
+    command: 'online',
+    describe: 'Start node (modes: normal/storage/relay)',
+    builder: (y) => y.option('mode', { describe: 'Node mode', type: 'string', default: 'normal' })
+         .option('port', { describe: 'Port', type: 'number' })
+         .option('storage', { describe: 'Storage node mode', type: 'boolean' })
+         .option('relay', { describe: 'Relay node mode', type: 'boolean' }),
+    handler: (argv) => cmds.online(argv.storage ? 'storage' : (argv.relay ? 'relay' : (argv.mode || 'normal')))
+  })
+
+  .command({ command: 'peers', describe: 'List connected peers', builder: {}, handler: () => cmds.peers() })
+  .command({
+    command: 'publish <file>', describe: 'Publish file to distributed storage',
+    builder: (y) => y.positional('file', { describe: 'File path', type: 'string' }),
+    handler: (argv) => cmds.publish(argv.file)
+  })
+  .command({
+    command: 'get <cid>', describe: 'Get content by CID',
+    builder: (y) => y.positional('cid', { describe: 'Content CID', type: 'string' }),
+    handler: (argv) => cmds.get(argv.cid)
+  })
+  .command({ command: 'skills', describe: 'List installed agent skills', builder: {}, handler: () => cmds.skillList() })
+  .command({
+    command: 'skill <name>', describe: 'Call agent skill by name',
+    builder: (y) => y.positional('name', { describe: 'Skill name', type: 'string' }),
+    handler: (argv) => cmds.skillCall(argv.name)
+  })
+  .command({ command: 'config', describe: 'Show node config', builder: {}, handler: () => cmds.configShow() })
+
   .help()
   .argv;
