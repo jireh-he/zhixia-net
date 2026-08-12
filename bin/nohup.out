@@ -1,0 +1,17 @@
+(node:580211) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+Zhixia Node v1.1
+Identity: zid:local
+Network: ONLINE
+Mode: normal
+Port: 9000
+NAT: open-ipv6 (ipv6-direct)
+Storage: 100GB
+Skills: 6 (ready)
+P2P Protocol: QUIC-priority, TCP-fallback
+Bootstrap: discovery-only (no relay)
+Status: READY
+
+Discovery URL: tcp://0.0.0.0:9000
+
+Press Ctrl+C to stop

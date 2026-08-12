@@ -78,15 +78,15 @@ exports.balance = (args) => {
 };
 
 exports.networkStatus = () => {
-  const nat = net.nat.status();
-  const tor = net.tor.status();
-  const stun = net.stun.detect();
+  const m = require('../../network');
+  const nat = m.nat ? m.nat.detect() : { nat: 'unknown', strategy: 'unknown' };
+  const pm = m.peerManager ? m.peerManager.status() : { connected: 0 };
   console.log('Network Status');
-  console.log('  Direct:', stun.natType === 'open' ? 'AVAILABLE' : 'FALLBACK');
-  console.log('  NAT:', stun.natType || 'unknown');
-  console.log('  Relay:', 'READY');
-  console.log('  Tor:', tor.enabled ? 'ON' : 'OFF');
+  console.log('  Protocol: QUIC-priority, TCP-fallback');
+  console.log('  NAT:', nat.nat);
   console.log('  Strategy:', nat.strategy);
+  console.log('  Bootstrap: discovery-only (no relay)');
+  console.log('  Peers connected:', pm.connected || 0);
 };
 
 exports.proposalList = () => {
