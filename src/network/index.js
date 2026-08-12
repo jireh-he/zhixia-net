@@ -10,12 +10,17 @@ module.exports = {
   cipher: require('./cipher'),
   noise: require('./noise'),
   replay: require('./replay'),
-  SecureSession: require('./secure-session'),
+  secureSession: require('./secure-session'),
   certificate: require('./certificate'),
-  KBucket: require('./kbucket'),
+  kbucket: require('./kbucket'),
   routingTable: require('./routing-table'),
   dhtRouter: require('./dht-router'),
   discoveryService: require('./discovery-service'),
   bootstrap: require('./bootstrap'),
-  nodeRouting: require('./node-routing')
+  nodeRouting: require('./node-routing'),
+  stun: require('./stun'),
+  nat: require('./nat-manager'),
+  relay: require('./relay'),
+  relayServer: require('./relay-server'),
+  tor: require('./tor-adapter')
 };
