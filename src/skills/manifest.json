@@ -1,0 +1,13 @@
+{
+  "name": "zhixia-net",
+  "version": "0.6.0",
+  "description": "Decentralized identity network skill for AI Agents",
+  "skills": [
+    { "name": "zhixia.identity",       "module": "./identity.skill" },
+    { "name": "zhixia.message",        "module": "./message.skill" },
+    { "name": "zhixia.storage",        "module": "./storage.skill" },
+    { "name": "zhixia.reputation",     "module": "./reputation.skill" },
+    { "name": "zhixia.market",         "module": "./market.skill" },
+    { "name": "zhixia.network",        "module": "./network.skill" }
+  ]
+}
