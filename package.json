@@ -4,7 +4,7 @@
   "description": "智侠网 — AI Agent 的 P2P 通讯基础设施",
   "main": "src/index.js",
   "bin": {
-    "zhixia": "./src/cli/index.js"
+    "zhixia": "./bin/zhixia.js"
   },
   "scripts": {
     "start": "node src/index.js",
