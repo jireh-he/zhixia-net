@@ -1,0 +1,21 @@
+{
+  "name": "zhixia-net",
+  "version": "0.5.3",
+  "description": "Decentralized identity communication content trust and multi-agent network skill",
+  "actions": [
+    { "name": "identity.get", "description": "Get local identity information", "input": {} },
+    { "name": "message.send", "description": "Send encrypted message", "input": { "receiver": "string", "text": "string" } },
+    { "name": "content.publish", "description": "Publish public content", "input": { "path": "string" } },
+    { "name": "trust.query", "description": "Query reputation information", "input": { "user": "string" } },
+    { "name": "agent.find", "description": "Find agent by capability", "input": { "capability": "string" } },
+    { "name": "agent.delegate", "description": "Delegate task to agent", "input": { "agent": "string", "task": "string" } },
+    { "name": "agent.task.status", "description": "Query task status", "input": { "task": "string" } },
+    { "name": "agent.reputation", "description": "Query agent reputation", "input": { "agent": "string" } },
+    { "name": "resource.query", "description": "Query resource usage", "input": { "agent": "string" } },
+    { "name": "resource.usage", "description": "Get resource usage by type", "input": { "agent": "string", "type": "string" } },
+    { "name": "resource.contribution", "description": "Get agent resource contribution score", "input": { "agent": "string" } },
+    { "name": "node.status", "description": "Get node status", "input": {} },
+    { "name": "node.start", "description": "Start node", "input": {} },
+    { "name": "node.stop", "description": "Stop node", "input": {} }
+  ]
+}
