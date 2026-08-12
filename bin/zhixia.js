@@ -68,7 +68,7 @@ yargs(hideBin(process.argv))
          .option('relay', { describe: 'Relay node mode', type: 'boolean' }),
     handler: (argv) => {
       const mod = require('../src/cli/commands/cli-commands');
-      mod.online(argv.storage ? 'storage' : (argv.relay ? 'relay' : (argv.mode || 'normal')));
+      mod.online(argv.storage ? 'storage' : (argv.relay ? 'relay' : (argv.mode || 'normal')), argv.port);
     }
   })
 

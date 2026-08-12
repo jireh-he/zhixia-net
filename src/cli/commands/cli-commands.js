@@ -126,12 +126,12 @@ exports.nodeOnline = async () => {
   console.log('Status: READY');
 };
 
-exports.online = async (mode) => {
+exports.online = async (mode, cliPort) => {
   const config = require('../../../config/default.json');
   const net = require('net');
   const m = require('../../../src/network');
   const info = loadIdentity();
-  const port = config.network.port || 9000;
+  const port = cliPort || config.network.port || 9000;
   const id = info ? info.id : 'zid:local';
 
   // 1. Init v1.1 P2P stack
