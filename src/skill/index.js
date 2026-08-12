@@ -6,4 +6,10 @@ require('./handlers/agent');
 require('./handlers/resource');
 require('./handlers/node');
 
-module.exports = require('./router');
+const registry = require('./registry');
+const router = require('./router');
+
+module.exports = {
+  list: () => registry.list(),
+  execute: (req) => router.execute(req)
+};

@@ -1,0 +1,20 @@
+module.exports = {
+  manager: require('./manager'),
+  hash: require('./hash'),
+  object: require('./object'),
+  chunk: require('./chunk'),
+  chunker: require('./chunker'),
+  chunkIndex: require('./chunk-index'),
+  cache: require('./cache'),
+  storage: require('./storage'),
+  propagation: require('./propagation'),
+  provider: require('./provider'),
+  providerRegistry: require('./provider'),
+  replication: require('./replication'),
+  sync: require('./sync-v2'),
+  cid: require('./cid'),
+  manifest: require('./manifest'),
+  downloader: require('./downloader'),
+  bittorrentAdapter: require('./bittorrent-adapter'),
+  transfer: require('./transfer')
+};
