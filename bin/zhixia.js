@@ -88,6 +88,12 @@ yargs(hideBin(process.argv))
   })
   .command({ command: 'config', describe: 'Show node config', builder: {}, handler: () => cmds.configShow() })
 
+  .command({ command: 'test', describe: 'Run self-test (Identity/Network/Discovery/Message/Storage/Skill)', builder: {}, handler: () => {
+    const { runTests } = require('../src/cli/commands/self-test');
+    const r = runTests();
+    process.exit(r.fail > 0 ? 1 : 0);
+  }})
+
   .command({
     command: 'send <to> <message>',
     describe: 'Send message to peer',
