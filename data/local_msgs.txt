@@ -1,0 +1,1 @@
+GOT: {"type":"ping","from":"test","payload":"local loopback"}

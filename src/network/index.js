@@ -16,11 +16,12 @@ module.exports = {
   routingTable: require('./routing-table'),
   dhtRouter: require('./dht-router'),
   discoveryService: require('./discovery-service'),
-  bootstrap: require('./bootstrap'),
   nodeRouting: require('./node-routing'),
-  stun: require('./stun'),
-  nat: require('./nat-manager'),
-  relay: require('./relay'),
-  relayServer: require('./relay-server'),
-  tor: require('./tor-adapter')
+  nat: require('./nat-probe'),
+  holePunch: require('./hole-punch'),
+  bootstrap: require('./bootstrap'),
+  peerExchange: require('./peer-exchange'),
+  peerTable: require('./peer-table'),
+  peerManager: require('./peer-manager'),
+  message: require('./message')
 };
