@@ -1,0 +1,13 @@
+{
+  "name": "zhixia",
+  "version": "2.0.0-alpha",
+  "description": "Zhixia Pure P2P Network Tool",
+  "main": "src/node/zhixia-node.js",
+  "bin": {
+    "zhixia": "./cli/zhixia.js"
+  },
+  "dependencies": {
+    "bencode": "^3.0.3",
+    "commander": "^10.0.1"
+  }
+}
