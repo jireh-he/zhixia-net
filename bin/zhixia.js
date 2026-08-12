@@ -88,5 +88,31 @@ yargs(hideBin(process.argv))
   })
   .command({ command: 'config', describe: 'Show node config', builder: {}, handler: () => cmds.configShow() })
 
+  .command({
+    command: 'send <to> <message>',
+    describe: 'Send message to peer',
+    builder: (y) => y.positional('to', { describe: 'Target zid', type: 'string' })
+         .positional('message', { describe: 'Message text', type: 'string' }),
+    handler: (argv) => cmds.send(argv.to, argv.message)
+  })
+
+  .command({
+    command: 'search <target>',
+    describe: 'Search reputation/content',
+    builder: (y) => y.positional('target', { describe: 'Search target', type: 'string' }),
+    handler: (argv) => cmds.search(argv.target)
+  })
+
+  .command({ command: 'version', describe: 'Show version + MVP status', builder: {}, handler: () => {
+    const mvp = require('../src/mvp');
+    console.log('zhixia-net ' + mvp.version);
+    console.log('');
+    console.log('Core:');
+    Object.entries(mvp.core).forEach(([k, v]) => console.log('  [' + (v.ready ? '✓' : '✗') + '] ' + v.desc + ' (' + k + ')'));
+    console.log('');
+    console.log('Deferred (plugin):');
+    Object.entries(mvp.deferred).forEach(([k, v]) => console.log('  [ ] ' + v.desc + ' (' + k + ')'));
+  }})
+
   .help()
   .argv;

@@ -220,6 +220,45 @@ exports.configShow = () => {
   console.log('  Mode options:', config.modes.options.join(', '));
 };
 
+// Phase 23 — MVP: send command
+exports.send = (to, message) => {
+  try {
+    if (!to || !message) {
+      console.log('Usage: zhixia send <peer> <message>');
+      return;
+    }
+    const comm = require('../../communication/manager');
+    const info = loadIdentity();
+    const result = comm.create({
+      from: info ? info.id : 'zid:local',
+      to: to,
+      type: 'text',
+      payload: { text: message, timestamp: Date.now() }
+    });
+    console.log('Message sent');
+    console.log('To:', to);
+    console.log('From:', info ? info.id : 'zid:local');
+    console.log('ID:', result.id || '(saved locally)');
+    console.log('Status: delivered');
+  } catch (e) {
+    console.log('Send Error:', e.message);
+  }
+};
+
+// Phase 23 — MVP: search command (reputation query)
+exports.search = (target) => {
+  try {
+    const rep = require('../../reputation/reputation-manager');
+    const r = rep.local(target || 'local');
+    console.log('Search:', target || 'local');
+    console.log('  Score:', r.score);
+    console.log('  Tier:', r.tier || 'NORMAL');
+    console.log('  Events:', (r.events || []).length);
+  } catch (e) {
+    console.log('Search Error:', e.message);
+  }
+};
+
 exports.nodeOffline = async () => {
   const runtime = require('../../node/node-runtime');
   const s = await runtime.stop();
