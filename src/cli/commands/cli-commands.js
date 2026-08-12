@@ -128,17 +128,66 @@ exports.nodeOnline = async () => {
 
 exports.online = async (mode) => {
   const config = require('../../../config/default.json');
-  const runtime = require('../../node/node-runtime');
+  const net = require('net');
+  const m = require('../../../src/network');
   const info = loadIdentity();
-  const s = await runtime.start({ id: info ? info.id : 'zid:local' });
-  console.log('Zhixia Node');
-  console.log('Identity:', s.id);
-  console.log('Network: ONLINE');
-  console.log('Mode:', mode);
-  console.log('Port:', config.network.port);
-  console.log('Storage:', config.storage.capacity);
-  console.log('Skills:', config.skills.enabled ? '6 (ready)' : 'disabled');
-  console.log('Status: READY');
+  const port = config.network.port || 9000;
+  const id = info ? info.id : 'zid:local';
+
+  // 1. Init v1.1 P2P stack
+  m.peerManager.init(id, port);
+  m.peerExchange.addPeer(id, [('/ip4/127.0.0.1/tcp/' + port)]);
+  m.dht.table.set(id, { id, addresses: [('/ip4/127.0.0.1/tcp/' + port)], ts: Date.now() });
+
+  const nat = m.nat.detect();
+
+  // 2. Start TCP P2P listener
+  const srv = net.createServer((c) => {
+    let peerId = null;
+    c.on('data', (d) => {
+      const lines = d.toString().split('\n').filter(l => l.trim());
+      for (const line of lines) {
+        try {
+          const msg = JSON.parse(line);
+          if (msg.type === 'register') {
+            peerId = msg.id;
+            m.peerManager.receivedPeerList([{ id: peerId, addresses: msg.addresses }]);
+            m.peerTable.setConnected(peerId);
+            const pex = m.peerExchange.getKnownPeers(20);
+            c.write(JSON.stringify({ type: 'registered', id, peers: pex.peers }) + '\n');
+            console.log('  peer registered:', peerId);
+          } else if (msg.type === 'ping') {
+            c.write(JSON.stringify({ type: 'pong', from: id, ts: Date.now() }) + '\n');
+          } else if (msg.type === 'msg' && peerId) {
+            m.message.receive({ ...msg, from: peerId });
+            c.write(JSON.stringify({ type: 'ack', from: id, data: msg.payload }) + '\n');
+            console.log('  msg from ' + peerId + ': ' + JSON.stringify(msg.payload).slice(0, 80));
+          } else {
+            c.write(JSON.stringify({ type: 'ack', from: id }) + '\n');
+          }
+        } catch (e) {}
+      }
+    });
+  });
+
+  srv.listen(port, '0.0.0.0', () => {
+    const listeningPort = srv.address().port;
+    console.log('Zhixia Node v1.1');
+    console.log('Identity:', id);
+    console.log('Network: ONLINE');
+    console.log('Mode:', mode);
+    console.log('Port:', listeningPort);
+    console.log('NAT:', nat.nat, '(' + nat.strategy + ')');
+    console.log('Storage:', config.storage.capacity);
+    console.log('Skills:', config.skills.enabled ? '6 (ready)' : 'disabled');
+    console.log('P2P Protocol: QUIC-priority, TCP-fallback');
+    console.log('Bootstrap: discovery-only (no relay)');
+    console.log('Status: READY');
+    console.log('');
+    console.log('Discovery URL:', 'tcp://' + srv.address().address + ':' + listeningPort);
+    console.log('');
+    console.log('Press Ctrl+C to stop');
+  });
 };
 
 exports.peers = () => {

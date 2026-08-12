@@ -66,7 +66,10 @@ yargs(hideBin(process.argv))
          .option('port', { describe: 'Port', type: 'number' })
          .option('storage', { describe: 'Storage node mode', type: 'boolean' })
          .option('relay', { describe: 'Relay node mode', type: 'boolean' }),
-    handler: (argv) => cmds.online(argv.storage ? 'storage' : (argv.relay ? 'relay' : (argv.mode || 'normal')))
+    handler: (argv) => {
+      const mod = require('../src/cli/commands/cli-commands');
+      mod.online(argv.storage ? 'storage' : (argv.relay ? 'relay' : (argv.mode || 'normal')));
+    }
   })
 
   .command({ command: 'peers', describe: 'List connected peers', builder: {}, handler: () => cmds.peers() })
