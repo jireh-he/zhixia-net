@@ -7,8 +7,8 @@ const rep = require('../../reputation/reputation-manager');
 
 exports.status = async (args = {}) => {
   const node = runtime.getStatus();
-  const stunInfo = net.stun.detect();
-  const peers = net.peer.list ? net.peer.list().length : 0;
+  const natInfo = net.nat ? net.nat.detect() : { nat: 'unknown', strategy: 'unknown' };
+  const pm = net.peerManager ? net.peerManager.status() : { connected: 0, peers: [] };
 
   console.log('═══════════════════════════════════');
   console.log('  zhixia-net Status');
@@ -17,8 +17,8 @@ exports.status = async (args = {}) => {
   console.log('  Node:', node.id || 'zid:local');
   console.log('  Online:', node.online ? 'YES ✓' : 'NO');
   console.log('  Network: P2P');
-  console.log('  NAT:', stunInfo.natType === 'open' ? 'Open (Direct)' : stunInfo.natType || 'unknown');
-  console.log('  Peers:', peers);
+  console.log('  NAT:', natInfo.nat + ' (' + natInfo.strategy + ')');
+  console.log('  Peers:', pm.connected);
   console.log('');
   console.log('  Modules:');
   console.log('   Identity:   ✓');

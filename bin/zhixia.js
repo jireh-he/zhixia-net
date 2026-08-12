@@ -7,7 +7,7 @@ const statusCmd = require('../src/cli/commands/status');
 yargs(hideBin(process.argv))
   .scriptName('zhixia')
   .usage('$0 <cmd> [args]')
-  .version('0.6.4')
+  .version('1.1.0')
   .demandCommand()
   .strict()
 
