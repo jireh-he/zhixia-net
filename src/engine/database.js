@@ -1,6 +1,19 @@
 // Layer 2: SQLite Database
-// 使用 Node 22+ 内置 node:sqlite（零外部 native 依赖）
-const { DatabaseSync } = require('node:sqlite');
+// Node 22+: node:sqlite 内置；Node 16-20: 回退到 better-sqlite3
+let DatabaseSync;
+try {
+  const ns = require('node:sqlite');
+  DatabaseSync = ns.DatabaseSync;
+} catch (e) {
+  const bs = require('better-sqlite3');
+  // better-sqlite3 返回 db 实例直接执行方法，包装成兼容接口
+  DatabaseSync = class DatabaseSync {
+    constructor(path) { this.db = bs(path); }
+    exec(sql, params) { if (params) this.db.prepare(sql).run(...params); else this.db.exec(sql); }
+    prepare(sql) { return this.db.prepare(sql); }
+    close() { this.db.close(); }
+  };
+}
 const path = require('path');
 const fs = require('fs');
 
