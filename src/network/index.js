@@ -23,5 +23,7 @@ module.exports = {
   peerExchange: require('./peer-exchange'),
   peerTable: require('./peer-table'),
   peerManager: require('./peer-manager'),
-  message: require('./message')
+  message: require('./message'),
+  tor: require('./tor-adapter'),
+  connectionStrategy: require('./connection-strategy')
 };
