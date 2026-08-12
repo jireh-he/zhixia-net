@@ -1,0 +1,7 @@
+{
+  "bootstrap": ["node1.zhixia.net:9000"],
+  "port": 9000,
+  "discovery": true,
+  "replication": 3,
+  "nat": "auto"
+}

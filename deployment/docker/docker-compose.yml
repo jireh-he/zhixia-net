@@ -1,0 +1,65 @@
+services:
+  bootstrap:
+    build:
+      context: ../..
+      dockerfile: deployment/docker/Dockerfile.bootstrap
+    ports:
+      - "9000:9000"
+    volumes:
+      - bootstrap-data:/zhixia/data
+    restart: unless-stopped
+
+  node1:
+    build:
+      context: ../..
+      dockerfile: deployment/docker/Dockerfile.node
+    ports:
+      - "9001:9000"
+    environment:
+      - ZHIXIA_BOOTSTRAP=bootstrap:9000
+      - ZHIXIA_NODE_MODE=normal
+    depends_on:
+      - bootstrap
+    restart: unless-stopped
+
+  node2:
+    build:
+      context: ../..
+      dockerfile: deployment/docker/Dockerfile.node
+    ports:
+      - "9002:9000"
+    environment:
+      - ZHIXIA_BOOTSTRAP=bootstrap:9000
+      - ZHIXIA_NODE_MODE=normal
+    depends_on:
+      - bootstrap
+    restart: unless-stopped
+
+  node3:
+    build:
+      context: ../..
+      dockerfile: deployment/docker/Dockerfile.node
+    ports:
+      - "9003:9000"
+    environment:
+      - ZHIXIA_BOOTSTRAP=bootstrap:9000
+      - ZHIXIA_NODE_MODE=storage
+    depends_on:
+      - bootstrap
+    restart: unless-stopped
+
+  node4:
+    build:
+      context: ../..
+      dockerfile: deployment/docker/Dockerfile.node
+    ports:
+      - "9004:9000"
+    environment:
+      - ZHIXIA_BOOTSTRAP=bootstrap:9000
+      - ZHIXIA_NODE_MODE=relay
+    depends_on:
+      - bootstrap
+    restart: unless-stopped
+
+volumes:
+  bootstrap-data:

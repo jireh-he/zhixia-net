@@ -1,0 +1,7 @@
+{
+  "type": "bootstrap",
+  "port": 9000,
+  "maxPeers": 1000,
+  "discovery": true,
+  "storage": false
+}
