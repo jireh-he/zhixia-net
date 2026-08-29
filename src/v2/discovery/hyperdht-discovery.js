@@ -81,19 +81,46 @@ class HyperDHTDiscovery {
             this._log(`[hyperdht] ready() failed: ${e.message}`);
         }
 
-        // 把自己 announce 到 DHT 里（这样别的节点能 findPeer 到我）
-        // target = hash(自己的 publicKey)
-        const selfKey = this.dht.defaultKeyPair.publicKey;
+        // 启动 hyperdht server → 触发 announcer → 把自己注册到 DHT 环
+        // 别人就能通过 dht.findPeer(publicKey) 找到我们
         try {
-            this._stats.announced++;
-            this._log(`[hyperdht] self key: ${this._keyPrefix(selfKey)}...`);
+            this._server = this.dht.createServer();
+            this._server.on('connection', (stream) => {
+                this._onPeerConnection(stream);
+            });
+            await this._server.listen(this.dht.defaultKeyPair);
+            this._log(`[hyperdht] server listening, target=${this._server.target?.toString('hex').slice(0, 16) || 'pending'}`);
+            this._log(`[hyperdht] announcer started, relays=${(this._server.relayAddresses || []).length}`);
         } catch (e) {
-            this._stats.errors.push(`announce-self: ${e.message}`);
+            this._stats.errors.push(`server-listen: ${e.message}`);
+            this._log(`[hyperdht] server listen failed: ${e.message}`);
         }
+    }
+
+    /**
+     * 收到对端连接时的回调
+     * 默认行为：把 stream 包装成 peer 记录，通知上层
+     */
+    _onPeerConnection(stream) {
+        // hyperdht 加密 stream 已建立，对端身份通过 noise 握手验证
+        const peer = {
+            id: 'hyperdht-stream',
+            family: 'hyperdht',
+            transport: 'noise',
+            state: 'CONNECTED',
+            source: 'hyperdht',
+            lastSeen: Date.now(),
+            stream: stream,
+        };
+        // 通知上层 (zhixia message.js 可以注册 handler 处理 stream data)
+        if (this.onStream) this.onStream(stream, peer);
     }
 
     async stop() {
         this.running = false;
+        if (this._server) {
+            try { await this._server.destroy(); } catch { /* already destroyed */ }
+        }
         if (this.dht) {
             try { await this.dht.destroy(); } catch { /* already destroyed */ }
         }
