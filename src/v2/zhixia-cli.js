@@ -32,6 +32,14 @@ program
             console.log(`Payload: ${msg.payload.text}\n> `);
         });
 
+        // 打印身份，方便对端互发
+        const pubKeyHex = node.identity.publicKeyHex || '';
+        console.log('');
+        console.log(`Your node id:    ${node.identity.id}`);
+        console.log(`Your public key: ${pubKeyHex}`);
+        console.log(`Send message:    send <peerPublicKeyHex> <text>`);
+        console.log('');
+
         const readline = require('readline').createInterface({
             input: process.stdin,
             output: process.stdout

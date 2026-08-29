@@ -25,9 +25,41 @@ module.exports = class Message {
     }
 
     // 注册一个已连接的 peer（sendMessage 路径）
+    // socket 可以是 net.Socket 或 hyperdht stream（都支持 write / on('data') / on('close')）
     registerPeer(id, socket) {
         this.peers.set(id, socket);
-        socket.on('close', () => this.peers.delete(id));
+        const sock = socket;
+        sock.on('close', () => this.peers.delete(id));
+        sock.on('error', () => this.peers.delete(id));
+    }
+
+    // 专门注册 hyperdht 加密 stream（无 REGISTER/ACK 握手，直接收发 JSON 消息）
+    registerStream(peerId, stream) {
+        this.peers.set(peerId, stream);
+        let buf = '';
+        stream.on('data', (chunk) => {
+            buf += chunk.toString();
+            let idx;
+            while ((idx = buf.indexOf('\n')) !== -1) {
+                const line = buf.slice(0, idx).trim();
+                buf = buf.slice(idx + 1);
+                if (!line) continue;
+                try {
+                    const msg = JSON.parse(line);
+                    if (msg.type === 'CHAT') {
+                        const h = this.router.handlers['CHAT'];
+                        if (h) h({
+                            from: msg.from || peerId,
+                            to: this.node.identity.id,
+                            payload: msg.data,
+                            ts: Date.now()
+                        });
+                    }
+                } catch (e) { /* skip malformed */ }
+            }
+        });
+        stream.on('close', () => this.peers.delete(peerId));
+        stream.on('error', () => this.peers.delete(peerId));
     }
 
     // 通过 TCP 发送消息

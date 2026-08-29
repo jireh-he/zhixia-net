@@ -33,6 +33,7 @@ module.exports = class Discovery {
                 seed: seed,
                 keyPair: keyPair,
                 onPeer: (peer) => this._onPeer(peer),
+                onStream: (stream, peer) => this._onStream(stream, peer),
             });
         } else {
             throw new Error(`Unknown discovery backend: ${this.backend}`);
@@ -77,6 +78,41 @@ module.exports = class Discovery {
         // 转发给 PeerManager，让 connection 层可以直连
         if (this.node && this.node.peers && typeof this.node.peers.add === 'function') {
             try { this.node.peers.add(peer); } catch (e) { /* peer manager 可能拒收 */ }
+        }
+    }
+
+    /**
+     * 收到对端 hyperdht 加密 stream 时的回调
+     * 把 stream 注册到 message.js，让对端发的 CHAT 消息能被 router 处理
+     */
+    _onStream(stream, peer) {
+        if (!this.node || !this.node.message || typeof this.node.message.registerStream !== 'function') {
+            return;
+        }
+        // 对端身份来自 noise 握手，用 peer.id 作为路由 id
+        // hyperdht stream 的 remotePublicKey 可以从 stream.remotePublicKey 读
+        let peerId = peer.id;
+        try {
+            if (stream.remotePublicKey) {
+                peerId = `hyper:${Buffer.from(stream.remotePublicKey).toString('hex').slice(0, 24)}`;
+                peer.id = peerId;
+            }
+        } catch (e) {}
+
+        try {
+            this.node.message.registerStream(peerId, stream);
+            // 同步到 PeerManager
+            if (this.node.peers && typeof this.node.peers.add === 'function') {
+                this.node.peers.add({
+                    ...peer,
+                    id: peerId,
+                    publicKey: stream.remotePublicKey
+                        ? Buffer.from(stream.remotePublicKey)
+                        : undefined,
+                });
+            }
+        } catch (e) {
+            // 不阻塞连接
         }
     }
 };

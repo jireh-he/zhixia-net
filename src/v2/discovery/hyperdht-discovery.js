@@ -50,6 +50,8 @@ class HyperDHTDiscovery {
         this.running = false;
         this.peers = new Map();
         this.onPeer = opts.onPeer || (() => {});
+        this.onStream = opts.onStream || null;   // 可选：收到对端连接时回调
+        this._server = null;
         this._stats = {
             announced: 0,
             discovered: 0,
@@ -102,6 +104,7 @@ class HyperDHTDiscovery {
      * 默认行为：把 stream 包装成 peer 记录，通知上层
      */
     _onPeerConnection(stream) {
+        console.log(`[hyperdht] _onPeerConnection triggered, stream=${!!stream}`);
         // hyperdht 加密 stream 已建立，对端身份通过 noise 握手验证
         const peer = {
             id: 'hyperdht-stream',
@@ -113,7 +116,12 @@ class HyperDHTDiscovery {
             stream: stream,
         };
         // 通知上层 (zhixia message.js 可以注册 handler 处理 stream data)
-        if (this.onStream) this.onStream(stream, peer);
+        if (this.onStream) {
+            console.log(`[hyperdht] calling onStream callback`);
+            this.onStream(stream, peer);
+        } else {
+            console.log(`[hyperdht] onStream callback NOT registered`);
+        }
     }
 
     async stop() {
