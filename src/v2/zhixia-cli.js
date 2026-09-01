@@ -3,7 +3,7 @@
 'use strict';
 
 const { Command } = require('commander');
-const ZhixiaNode = require('../src/node/zhixia-node');
+const ZhixiaNode = require('./node/zhixia-node');
 
 const program = new Command();
 
