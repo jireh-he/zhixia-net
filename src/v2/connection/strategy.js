@@ -2,11 +2,16 @@
 
 const net = require('net');
 const NAT = require('./nat');
+const WebRTCTransport = require('./webrtc-transport');
 
 module.exports = class ConnectionStrategy {
     constructor(opts = {}) {
         this.node = opts.node || null;
         this.nat = new NAT({ node: this.node });
+        this.webrtc = new WebRTCTransport({
+            node: this.node,
+            signalingUrl: opts.signalingUrl || '',
+        });
         this.quic = {
             send: async (peerId, data) => {
                 if (this.node && this.node.message) {
@@ -23,11 +28,8 @@ module.exports = class ConnectionStrategy {
     /**
      * 连接一个 peer，策略优先级：
      *   1. hyperdht.connect（peer.publicKey 存在时）— noise 加密 + 自动打洞
-     *   2. TCP 直连（fallback，兼容旧 peer）
-     *
-     * 返回：{ success, strategy, connection: { id, socket, addresses } }
-     * socket 对 hyperdht 是 stream，对 TCP 是 net.Socket；
-     * 都支持 write / on('data') / on('error') / on('close') / destroy()。
+     *   2. WebRTC DataChannel（hyperdht 失败 + 有 signalingUrl 时）
+     *   3. TCP 直连（fallback，兼容旧 peer）
      */
     async connect(peer) {
         // ── 策略 1: hyperdht 加密直连 ──
@@ -47,13 +49,26 @@ module.exports = class ConnectionStrategy {
                 };
             } catch (e) {
                 if (process.env.DEBUG_ZHIXIA) {
-                    console.log(`[connection] hyperdht failed: ${e.message}, fallback to TCP`);
+                    console.log(`[connection] hyperdht failed: ${e.message}, fallback to webrtc`);
                 }
-                // 继续走 TCP
             }
         }
 
-        // ── 策略 2: TCP 直连 ──
+        // ── 策略 2: WebRTC ──
+        if (this.webrtc && this.webrtc.signalingUrl) {
+            try {
+                const result = await this.webrtc.connect(peer);
+                if (result.success) {
+                    return result;
+                }
+            } catch (e) {
+                if (process.env.DEBUG_ZHIXIA) {
+                    console.log(`[connection] webrtc failed: ${e.message}, fallback to TCP`);
+                }
+            }
+        }
+
+        // ── 策略 3: TCP 直连 ──
         return this._connectTCP(peer);
     }
 

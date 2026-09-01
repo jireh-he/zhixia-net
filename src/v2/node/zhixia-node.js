@@ -35,7 +35,8 @@ class ZhixiaNode {
         this.connection = new ConnectionStrategy({
             node: this,
             peerManager: this.peers,
-            tor: this.config.transport.tor
+            tor: this.config.transport.tor,
+            signalingUrl: this.config.transport.webrtc.signalingUrl,
         });
         this.discovery = new Discovery({ node: this });
 

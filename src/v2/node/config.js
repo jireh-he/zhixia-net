@@ -3,6 +3,13 @@ module.exports = class Config {
         this.name = opts.name || 'node-1';
         this.port = opts.port || 9001;
         this.dataDir = opts.dataDir || './data';
-        this.transport = { tor: opts.tor || false };
+        this.transport = {
+            tor: opts.tor || false,
+            webrtc: {
+                signalingUrl: opts.signalingUrl
+                    || process.env.ZHIXIA_SIGNALING_URL
+                    || ''
+            }
+        };
     }
 };
