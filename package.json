@@ -24,6 +24,7 @@
     "commander": "^15.0.0",
     "hypercore-crypto": "^3.0.0",
     "hyperswarm": "^4.0.0",
+    "node-datachannel": "^0.33.2",
     "pino": "^9.0.0",
     "yargs": "^17.7.0"
   },

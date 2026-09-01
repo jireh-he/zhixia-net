@@ -1,0 +1,24 @@
+# Cloudflare Workers 配置
+# 部署：npx wrangler deploy
+# 本地测试：npx wrangler dev
+
+name = "zhixia-webrtc-signaling"
+main = "worker.js"
+compatibility_date = "2026-08-01"
+
+[durable_objects]
+bindings = [
+  { name = "SIGNALING_DO", class_name = "SignalingDO", script_name = "zhixia-webrtc-signaling" }
+]
+
+[vars]
+VERSION = "1.0.0"
+
+# 可选：自定义域名 (需要先在 Cloudflare 绑定)
+# [[routes]]
+# pattern = "signaling.zhixia.net/*"
+# zone_name = "zhixia.net"
+
+# 部署后访问：
+#   wss://<subdomain>.workers.dev/?peerId=zid:xxx
+#   http://<subdomain>.workers.dev/health
