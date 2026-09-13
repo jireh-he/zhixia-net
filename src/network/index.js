@@ -18,6 +18,7 @@ module.exports = {
   discoveryService: require('./discovery-service'),
   nodeRouting: require('./node-routing'),
   nat: require('./nat-probe'),
+  stun: require('./stun'),
   holePunch: require('./hole-punch'),
   bootstrap: require('./bootstrap'),
   peerExchange: require('./peer-exchange'),

@@ -65,14 +65,15 @@ yargs(hideBin(process.argv))
     builder: (y) => y.option('mode', { describe: 'Node mode', type: 'string', default: 'normal' })
          .option('port', { describe: 'Port', type: 'number' })
          .option('storage', { describe: 'Storage node mode', type: 'boolean' })
-         .option('relay', { describe: 'Relay node mode', type: 'boolean' }),
+         .option('bootstrap', { describe: 'Bootstrap server URL (e.g. 59.77.42.202:9001)', type: 'string' }),
     handler: (argv) => {
       const mod = require('../src/cli/commands/cli-commands');
-      mod.online(argv.storage ? 'storage' : (argv.relay ? 'relay' : (argv.mode || 'normal')), argv.port);
+      const mode = argv.storage ? 'storage' : (argv.mode || 'normal');
+      mod.online(mode, argv.port, argv.bootstrap);
     }
   })
 
-  .command({ command: 'peers', describe: 'List connected peers', builder: {}, handler: () => cmds.peers() })
+  .command('peers', 'List connected peers', {}, () => cmds.peers())
   .command({
     command: 'publish <file>', describe: 'Publish file to distributed storage',
     builder: (y) => y.positional('file', { describe: 'File path', type: 'string' }),
@@ -99,10 +100,12 @@ yargs(hideBin(process.argv))
 
   .command({
     command: 'send <to> <message>',
-    describe: 'Send message to peer',
+    describe: 'Send message to peer (supports --bootstrap/--relay for internet P2P)',
     builder: (y) => y.positional('to', { describe: 'Target zid', type: 'string' })
-         .positional('message', { describe: 'Message text', type: 'string' }),
-    handler: (argv) => cmds.send(argv.to, argv.message)
+         .positional('message', { describe: 'Message text', type: 'string' })
+         .option('bootstrap', { describe: 'Bootstrap server URL', type: 'string' })
+         .option('relay', { describe: 'Relay server URL (for NAT fallback)', type: 'string' }),
+    handler: (argv) => cmds.send(argv.to, argv.message, argv.bootstrap, argv.relay)
   })
 
   .command({
@@ -110,6 +113,14 @@ yargs(hideBin(process.argv))
     describe: 'Search reputation/content',
     builder: (y) => y.positional('target', { describe: 'Search target', type: 'string' }),
     handler: (argv) => cmds.search(argv.target)
+  })
+
+  .command({
+    command: 'bootstrap-server',
+    describe: 'Start bootstrap server (peer discovery, BT tracker)',
+    builder: (y) => y.option('port', { describe: 'HTTP port', type: 'number', default: 9001 })
+         .option('host', { describe: 'Bind address', type: 'string', default: '0.0.0.0' }),
+    handler: (argv) => cmds.bootstrapServer(argv.port, argv.host)
   })
 
   .command({ command: 'version', describe: 'Show version + MVP status', builder: {}, handler: () => {

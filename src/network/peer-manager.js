@@ -1,8 +1,8 @@
-// v1.1 — Peer Manager（统一连接管理器，无 Relay）
-// 策略：IPv6 → 公网 IPv4 → QUIC → UDP Hole Punching → 标记不可达
+// v1.2 — Peer Manager（集成 STUN 检测 + 三模式连接策略）
+// 启动时跑 STUN 检测确定 NAT 类型，connect 时真调 connectionStrategy
 const natProbe = require('./nat-probe');
 const holePunch = require('./hole-punch');
-const transport = require('./transport');
+const connectionStrategy = require('./connection-strategy');
 const peerTable = require('./peer-table');
 const peerExchange = require('./peer-exchange');
 
@@ -11,6 +11,8 @@ class PeerManager {
     this.id = null;
     this.myAddresses = [];
     this.myPort = 9000;
+    this.natInfo = null;        // STUN 检测结果
+    this.holePunchReady = false;
   }
 
   init(id, port) {
@@ -35,23 +37,55 @@ class PeerManager {
     return { id: this.id, addresses: this.myAddresses, nat };
   }
 
-  // 连接策略：IPv6 → Public IPv4 → QUIC → Hole Punching → unreachable
-  async connectTo(peerId, peerAddresses) {
-    const nat = natProbe.last || natProbe.detect();
-    let strategy = null;
+  // STUN 检测：确定 NAT 类型，决定是否启动打洞
+  async detectNat(opts = {}) {
+    this.natInfo = await natProbe.detectWithSTUN(opts);
+    // 如果 NAT 类型需要打洞，预先启动 hole-punch socket
+    if (['fullcone-direct', 'restrict-punching', 'hole-punching'].includes(this.natInfo.strategy)) {
+      if (!holePunch.socket) {
+        await holePunch.listen(0);
+        this.holePunchReady = true;
+      }
+    }
+    return this.natInfo;
+  }
 
-    if (nat.strategy === 'ipv6-direct') {
-      strategy = 'ipv6-direct';
-    } else if (nat.strategy === 'public-ipv4-direct') {
-      strategy = 'public-ipv4-direct';
-    } else {
-      strategy = 'hole-punching';
+  // 连接 peer：真调 connectionStrategy.connect()
+  async connectTo(peerId, peerAddresses) {
+    // 确保 NAT 已检测
+    if (!this.natInfo) {
+      await this.detectNat();
     }
 
-    // 加入 peer table
-    peerTable.add(peerId, { addresses: peerAddresses, transport: strategy });
-    peerTable.setConnected(peerId);
-    return { peerId, strategy, ok: true };
+    // 真调 connectionStrategy.connect
+    const result = await connectionStrategy.connect(peerId, peerAddresses, {
+      nat: this.natInfo,
+      myId: this.id
+    });
+
+    // 记录到 peer table
+    peerTable.add(peerId, {
+      addresses: peerAddresses,
+      transport: result.strategy,
+      ok: result.ok,
+      myPort: result.myPort,
+      targetAddr: result.targetAddr,
+      targetPort: result.targetPort
+    });
+
+    if (result.ok) {
+      peerTable.setConnected(peerId);
+    }
+
+    return {
+      peerId,
+      ok: result.ok,
+      strategy: result.strategy,
+      error: result.error,
+      myPort: result.myPort,
+      targetAddr: result.targetAddr,
+      targetPort: result.targetPort
+    };
   }
 
   // 推荐 peer 给新来的连接方
@@ -77,7 +111,8 @@ class PeerManager {
     return {
       id: this.id,
       addresses: this.myAddresses,
-      nat: natProbe.last || natProbe.detect(),
+      nat: this.natInfo || natProbe.last || natProbe.detect(),
+      holePunchReady: this.holePunchReady,
       peers: peerTable.list(),
       connected: peerTable.connected().length
     };

@@ -23,9 +23,8 @@ const tests = [
   {
     name: 'Network',
     fn: () => {
-      const stun = net.stun.detect();
-      const nat = net.nat.status();
-      return { nat: stun.natType, strategy: nat.strategy };
+      const nat = net.nat.detect();
+      return { nat: nat.nat, strategy: nat.strategy };
     }
   },
   {
