@@ -9,3 +9,8 @@ node_modules/
 zhixia-data/
 dist/
 coverage/
+
+# tailcat engine (auto-download, see scripts/install-tailcat.js)
+bin/tailcat/
+# tailcat runtime state
+data/tailcat.last-addr.json
