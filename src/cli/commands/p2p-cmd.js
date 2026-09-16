@@ -1,29 +1,20 @@
 'use strict';
 /**
- * zhixia link <sub> — P2P 聊天 & 文件传输（第四传输层）
+ * zhixia P2P 顶层命令组 — 聊天 & 文件传输（第四传输层，不套中间层）
  *
  * 引擎：github.com/tailscale/tailcat 官方静态二进制（bin/tailcat/，install-tailcat.js 下载）
- * 特性：WireGuard 端到端加密 + 公共 DERP 中继 NAT 打洞，纯 P2P 无自建 relay。
+ * 特性：WireGuard 端到端加密 + 公共 DERP 中继 bootstrap + 自动 NAT 打洞升级 UDP 直连。
+ * 纯 P2P、无账号、无自建 relay。
+ *
+ * 命令直接挂 zhixia 顶层：
+ *   zhixia key / book / chat / inbox / files / send / send-file / get / ls / ping / last
+ * 其中 send / get 与 MVP 层命令同名 → bin/zhixia.js 按目标形态智能路由：
+ *   目标是 tc 地址或通讯录昵称 → P2P；目标是 zid / CID → MVP。
  *
  * 核心设计 —— 稳定身份 + 通讯录：
  *   引擎 genkey 生成持久 key（~/.config/tailcat/keys/），对应 tc 地址**永久稳定**。
- *   通讯录 data/link-book.json 存「昵称 → 朋友稳定地址」，一次存永久有效：
+ *   通讯录 data/p2p-book.json 存「昵称 → 朋友稳定地址」，一次存永久有效：
  *   以后 send/get/ls/ping 直接 +昵称，自动匹配地址，不用记/传长地址串。
- *
- * 子命令：
- *   link key                  生成/显示本端稳定身份（首次自动 genkey）
- *   link book add <昵称> <tc地址>   把朋友存进通讯录
- *   link book remove <昵称>       删除
- *   link book [list]            列出通讯录
- *   link chat [--name X]      聊天监听（打印本端稳定地址，连上后双向打字）
- *   link inbox [dir]          文件收件箱（write-only drop box）
- *   link files [dir] [--rw]   文件服务（SFTP，默认只读）
- *   link send <昵称|地址> <text>
- *   link send-file <文件...> <昵称|地址> [-r]
- *   link get <昵称|地址> <远端文件> [本地路径]
- *   link ls <昵称|地址> [路径]
- *   link ping <昵称|地址>
- *   link last                 显示本端稳定地址
  *
  * 本模块自带 argv 解析（main），不依赖 yargs：yargs 17 strict 模式与
  * variadic positional 不兼容（变参值被当 unknown argument 拒绝）。
@@ -36,16 +27,19 @@ const {
 } = require('../../tailcat/adapter');
 
 const DEFAULT_KEY = 'zhixia-default';
-const IDENTITY_FILE = path.join(process.cwd(), 'data', 'link-identity.json');
-const BOOK_FILE = path.join(process.cwd(), 'data', 'link-book.json');
+const IDENTITY_FILE = path.join(process.cwd(), 'data', 'p2p-identity.json');
+const BOOK_FILE = path.join(process.cwd(), 'data', 'p2p-book.json');
 const KEY_DIR = path.join(os.homedir(), '.config', 'tailcat', 'keys');
 
+// P2P 专有命令（与 MVP 层无冲突，bin/zhixia.js 直接拦截这些词）
+const P2P_OWN = ['key', 'book', 'chat', 'inbox', 'files', 'send-file', 'last', 'ls', 'ping'];
+
 const USAGE = [
-  'zhixia link <sub> [args]   （P2P 聊天 & 文件传输，第四传输层）',
+  'zhixia P2P 顶层命令（第四传输层，昵称自动匹配地址）:',
   '',
   '身份 / 通讯录:',
   '  key                         生成/显示本端稳定 P2P 身份（地址永久不变）',
-  '  book add <昵称> <tc地址>    把朋友存进通讯录（对方先跑 link key 把他的稳定地址给你）',
+  '  book add <昵称> <tc地址>    把朋友存进通讯录（对方先跑 zhixia key 把他的稳定地址给你）',
   '  book remove <昵称>          从通讯录删除',
   '  book [list]                 查看通讯录',
   '',
@@ -59,7 +53,7 @@ const USAGE = [
   '  send-file <文件...> <昵称|地址> [-r]   发文件到对方 inbox',
   '  get <昵称|地址> <远端文件> [本地路径]   从对方 files 服务拉文件',
   '  ls <昵称|地址> [路径]                  列对方 files 目录',
-  '  ping <昵称|地址>                        连通测试（DERP 中继 vs 直连）',
+  '  ping <昵称|地址>                       连通测试（DERP 中继 vs 直连）',
   '',
   '  last                          显示本端稳定地址',
 ].join('\n');
@@ -89,7 +83,6 @@ async function ensureIdentity() {
   if (id && id.address) return id;
 
   if (keyFileExists(DEFAULT_KEY)) {
-    // key 在但记录丢了：用监听器恢复确定性地址（同 key + fixed-region 每次打印同一个地址）
     const { address, stop } = await startListener([], {
       label: 'recover', keyName: DEFAULT_KEY, timeoutMs: 60000
     });
@@ -106,7 +99,6 @@ async function ensureIdentity() {
     console.log('[zhixia] ✗ 生成稳定身份失败:', r.stderr || r.error);
     process.exit(1);
   }
-  // r.existed=true 但上面恢复又失败（网络不通）——只能提示
   id = { keyName: r.keyName || DEFAULT_KEY, address: r.address, ts: Date.now() };
   if (!id.address) {
     console.log('[zhixia] ✗ 未能确定稳定地址（DERP 网络不通？key 已存在，恢复记录失败）');
@@ -121,7 +113,7 @@ exports.keyCmd = async () => {
   console.log('[zhixia] 本端稳定 P2P 身份');
   console.log('  身份名: ' + id.keyName);
   console.log('  稳定地址: ' + id.address);
-  console.log('  把此地址发给朋友，他跑: zhixia link book add <你的昵称> ' + id.address);
+  console.log('  把此地址发给朋友，他跑: zhixia book add <你的昵称> ' + id.address);
   console.log('  （地址永久不变，存一次通讯录就够了；key 存于 ' + KEY_DIR + '/）');
 };
 
@@ -137,23 +129,36 @@ function saveBook(book) {
   fs.writeFileSync(BOOK_FILE, JSON.stringify(book, null, 2));
 }
 
-/** 昵称/地址 → 地址。昵称走通讯录（大小写不敏感 + 子串匹配兜底） */
+/** 纯判断（不 exit）：目标是否像 P2P 目标（tc 地址或通讯录昵称）。供 bin/zhixia.js 路由 send/get */
+function isP2PTarget(t) {
+  if (!t || typeof t !== 'string') return false;
+  const s = t.trim();
+  if (/^tc[A-Za-z0-9_-]{20,}$/.test(s)) return true;
+  const book = loadBook();
+  const names = Object.keys(book);
+  if (names.some(n => n === s)) return true;
+  const subs = names.filter(n => n.toLowerCase().includes(s.toLowerCase()));
+  return subs.length === 1;
+}
+exports.isP2PTarget = isP2PTarget;
+exports.wantP2PSend = (args) => isP2PTarget(args && args[0]);
+exports.wantP2PGet = (args) => isP2PTarget(args && args[0]);
+
+/** 昵称/地址 → 地址。昵称走通讯录（精确 + 唯一子串兜底） */
 function resolveTarget(target) {
   const t = String(target || '').trim();
   if (/^tc[A-Za-z0-9_-]+$/.test(t)) return { addr: t, via: '地址' };
   const book = loadBook();
   const names = Object.keys(book);
-  // 精确（忽略大小写）
   let hit = names.find(n => n === t);
   if (hit) return { addr: book[hit].address, via: '通讯录: ' + hit };
-  // 唯一子串兜底
   const subs = names.filter(n => n.toLowerCase().includes(t.toLowerCase()));
   if (subs.length === 1) return { addr: book[subs[0]].address, via: '通讯录: ' + subs[0] };
   console.log('[zhixia] ✗ "' + t + '" 不是 tc 地址，通讯录里也没有这个昵称。');
   if (names.length) {
     console.log('        可用昵称: ' + names.join('、'));
   } else {
-    console.log('        通讯录为空。先跑: zhixia link book add <昵称> <对方tc地址>');
+    console.log('        通讯录为空。先跑: zhixia book add <昵称> <对方tc地址>');
   }
   process.exit(1);
 }
@@ -164,7 +169,7 @@ exports.bookCmd = async (args) => {
   if (!sub || sub === 'list') {
     const names = Object.keys(book);
     console.log('[zhixia] 通讯录 (' + names.length + ' 人):');
-    if (!names.length) console.log('  (空) 添加: zhixia link book add <昵称> <tc地址>');
+    if (!names.length) console.log('  (空) 添加: zhixia book add <昵称> <tc地址>');
     names.forEach(n => {
       console.log('  ' + n + ' → ' + book[n].address + (book[n].note ? '  (' + book[n].note + ')' : ''));
     });
@@ -173,12 +178,12 @@ exports.bookCmd = async (args) => {
   if (sub === 'add') {
     const nick = args[1];
     const addr = args[2];
-    if (!nick || !addr) { console.log('[zhixia] 用法: zhixia link book add <昵称> <tc地址>'); process.exit(1); }
+    if (!nick || !addr) { console.log('[zhixia] 用法: zhixia book add <昵称> <tc地址>'); process.exit(1); }
     if (!/^tc[A-Za-z0-9_-]+$/.test(addr)) { console.log('[zhixia] ✗ "' + addr + '" 不是合法 tc 地址（应以 tc 开头，完整粘贴）'); process.exit(1); }
     book[nick] = { address: addr, ts: Date.now() };
     saveBook(book);
     console.log('[zhixia] ✓ 已添加 ' + nick + ' → ' + addr);
-    console.log('        现在可以: zhixia link send ' + nick + " \"hi\"");
+    console.log('        现在可以: zhixia send ' + nick + ' "hi"');
     return;
   }
   if (sub === 'remove') {
@@ -190,7 +195,7 @@ exports.bookCmd = async (args) => {
     return;
   }
   console.log('[zhixia] 未知 book 子命令: ' + sub);
-  console.log('用法: zhixia link book [list] | add <昵称> <tc地址> | remove <昵称>');
+  console.log('用法: zhixia book [list] | add <昵称> <tc地址> | remove <昵称>');
   process.exit(1);
 };
 
@@ -212,11 +217,11 @@ exports.chat = async (args = {}) => {
   }
   console.log('');
   console.log('┌──────────────────────────────────────┐');
-  console.log('│ zhixia link chat — P2P 聊天已就绪         │');
+  console.log('│ zhixia chat — P2P 聊天已就绪          │');
   console.log('└──────────────────────────────────────┘');
   console.log('本端稳定地址（发给朋友存进通讯录）:');
   console.log('  ' + id.address);
-  console.log('朋友存好后可直接: zhixia link send <你的昵称> "消息"');
+  console.log('朋友存好后可直接: zhixia send <你的昵称> "消息"');
   console.log('（对端连上后可在此终端双向打字；Ctrl+C 退出）');
 };
 
@@ -229,7 +234,7 @@ exports.inbox = async (args = {}) => {
   console.log('');
   console.log('zhixia 收件箱 → ' + dir);
   console.log('本端稳定地址: ' + id.address);
-  console.log('朋友发送: zhixia link send-file <文件> <你的昵称/地址>');
+  console.log('朋友发送: zhixia send-file <文件> <你的昵称/地址>');
 };
 
 exports.files = async (args = {}) => {
@@ -241,7 +246,7 @@ exports.files = async (args = {}) => {
   console.log('');
   console.log('zhixia 文件服务 ' + (args.rw ? '[rw]' : '[ro]') + ' → ' + dir);
   console.log('本端稳定地址: ' + id.address);
-  console.log('朋友拉取: zhixia link get <你的昵称/地址> <文件名>');
+  console.log('朋友拉取: zhixia get <你的昵称/地址> <文件名>');
 };
 
 // ---------- 访问朋友（昵称自动匹配） ----------
@@ -255,11 +260,11 @@ async function targetOpts(target) {
 exports.send = async (args) => {
   const t = await targetOpts(args[0]);
   const text = args.slice(1).join(' ');
-  if (!text) { console.log('[zhixia] 用法: zhixia link send <昵称|地址> <文本>'); process.exit(1); }
+  if (!text) { console.log('[zhixia] 用法: zhixia send <昵称|地址> <文本>'); process.exit(1); }
   const { ok, code, stderr } = await chatSend(t.addr, text, { keyName: t.keyName });
   if (ok) {
     console.log('[zhixia] ✓ 已发送: ' + text);
-    console.log('        （对方 link chat 终端会显示；若长时间没显示，对方可能没开 link chat）');
+    console.log('        （对方 chat 终端会显示；若长时间没显示，对方可能没开 chat）');
   } else {
     if (stderr.trim()) process.stderr.write(stderr);
     console.log('[zhixia] ✗ 发送失败（code=' + code + '）');
@@ -275,7 +280,7 @@ exports.sendFile = async (args) => {
     if (a === '-r' || a === '--recursive') recursive = true;
     else pos.push(a);
   }
-  if (pos.length < 2) { console.log('[zhixia] 用法: zhixia link send-file <文件...> <昵称|地址> [-r]'); process.exit(1); }
+  if (pos.length < 2) { console.log('[zhixia] 用法: zhixia send-file <文件...> <昵称|地址> [-r]'); process.exit(1); }
   const target = pos[pos.length - 1];
   const files = pos.slice(0, pos.length - 1);
   const t = await targetOpts(target);
@@ -284,20 +289,20 @@ exports.sendFile = async (args) => {
     console.log('[zhixia] 发送 ' + f + ' → ' + target + ' 的收件箱...');
     const { ok, code } = await cpTo(t.addr, f, { recursive, keyName: t.keyName });
     if (!ok) {
-      console.log('[zhixia] ✗ 传输失败（code=' + code + '）— 对方要跑: zhixia link inbox');
+      console.log('[zhixia] ✗ 传输失败（code=' + code + '）— 对方要跑: zhixia inbox');
       process.exitCode = 1;
     } else {
-      console.log('[zhixia] ✓ ' + f + ' 已送达（drop box 可能加时间戳后缀，让对方 link ls 确认）');
+      console.log('[zhixia] ✓ ' + f + ' 已送达（drop box 可能加时间戳后缀，让对方 zhixia ls 确认）');
     }
   }
 };
 
 exports.get = async (args) => {
-  if (args.length < 2) { console.log('[zhixia] 用法: zhixia link get <昵称|地址> <远端文件> [本地路径]'); process.exit(1); }
+  if (args.length < 2) { console.log('[zhixia] 用法: zhixia get <昵称|地址> <远端文件> [本地路径]'); process.exit(1); }
   const t = await targetOpts(args[0]);
   const { ok, code, error } = await cpFrom(t.addr, args[1], { local: args[2] || '.', keyName: t.keyName });
   if (!ok) {
-    console.log('[zhixia] ✗ 拉取失败' + (error ? ' (' + error + ')' : '（code=' + code + '）') + ' — 对方要跑: zhixia link files');
+    console.log('[zhixia] ✗ 拉取失败' + (error ? ' (' + error + ')' : '（code=' + code + '）') + ' — 对方要跑: zhixia files');
     process.exitCode = 1;
   } else {
     console.log('[zhixia] ✓ ' + args[1] + ' → ' + (args[2] || '.') + ' 完成');
@@ -305,17 +310,17 @@ exports.get = async (args) => {
 };
 
 exports.lsDir = async (args) => {
-  if (!args[0]) { console.log('[zhixia] 用法: zhixia link ls <昵称|地址> [路径]'); process.exit(1); }
+  if (!args[0]) { console.log('[zhixia] 用法: zhixia ls <昵称|地址> [路径]'); process.exit(1); }
   const t = await targetOpts(args[0]);
   const { ok, code, error } = await ls(t.addr, args[1], t.keyName);
   if (!ok) {
-    console.log('[zhixia] ✗ ls 失败' + (error ? ' (' + error + ')' : '（code=' + code + '）') + ' — 对方要跑: zhixia link files');
+    console.log('[zhixia] ✗ ls 失败' + (error ? ' (' + error + ')' : '（code=' + code + '）') + ' — 对方要跑: zhixia files');
     process.exitCode = 1;
   }
 };
 
 exports.ping = async (args) => {
-  if (!args[0]) { console.log('[zhixia] 用法: zhixia link ping <昵称|地址>'); process.exit(1); }
+  if (!args[0]) { console.log('[zhixia] 用法: zhixia ping <昵称|地址>'); process.exit(1); }
   const t = await targetOpts(args[0]);
   const { ok, code, error } = await ping(t.addr, t.keyName);
   console.log('[zhixia] ping ' + t.addr + ' 结果: ' + (ok ? '✓ 可达' : '✗ 不可达（code=' + code + (error ? ', ' + error : '') + '）'));
@@ -325,7 +330,7 @@ exports.ping = async (args) => {
 exports.last = async () => {
   const id = loadIdentity();
   if (!id || !id.address) {
-    console.log('[zhixia] 尚无稳定身份。先跑: zhixia link key');
+    console.log('[zhixia] 尚无稳定身份。先跑: zhixia key');
     return;
   }
   console.log('本端稳定 P2P 地址 (' + id.keyName + '):');
@@ -341,7 +346,7 @@ exports.main = (argv) => {
     console.log(USAGE);
     return;
   }
-  const fail = (msg) => { console.log('[zhixia] ' + msg); process.exit(1); };
+  const fail = (msg) => { console.log('[zhixia] ' + msg); process.exit(1); }
   let p;
   switch (sub) {
     case 'key':
@@ -378,7 +383,7 @@ exports.main = (argv) => {
       p = exports.last();
       break;
     default:
-      fail('未知子命令: ' + sub);
+      fail('未知 P2P 子命令: ' + sub);
       console.log(USAGE);
   }
   if (p && p.then) p.catch((e) => { console.error('[zhixia] 错误:', e && e.message ? e.message : e); process.exit(1); });

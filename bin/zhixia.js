@@ -2,17 +2,31 @@
 const yargs = require('yargs/yargs');
 const { hideBin } = require('yargs/helpers');
 
-// P2P 链接子命令（zhixia link）走独立解析器
+// ========== P2P 顶层命令（第四传输层，不套中间层） ==========
+// P2P 专有命令（与 MVP 层不撞名）直接走独立解析器
 // （yargs strict 模式与 variadic positional 不兼容，且 ato Node 16 上保持零 yargs 依赖路径）
-if (process.argv[2] === 'link') {
-  const link = require('../src/cli/commands/link-cmd');
-  link.main(process.argv.slice(3));
+const P2P_OWN = ['key', 'book', 'chat', 'inbox', 'files', 'send-file', 'last', 'ls', 'ping'];
+if (P2P_OWN.includes(process.argv[2])) {
+  const p2p = require('../src/cli/commands/p2p-cmd');
+  p2p.main(process.argv.slice(2));
   return;
 }
-// 旧名 tailcat 已更名 link
-if (process.argv[2] === 'tailcat') {
-  console.log('[zhixia] 命令已更名: "zhixia tailcat ..." → "zhixia link ..."（tailcat 仅是引擎名，不再是命令名）');
-  process.exit(1);
+// send / get 与 MVP 层同名 → 按目标形态路由：tc 地址/通讯录昵称 → P2P；zid/CID → MVP
+if (process.argv[2] === 'send' || process.argv[2] === 'get') {
+  const p2p = require('../src/cli/commands/p2p-cmd');
+  const rest = process.argv.slice(3);
+  const wantP2P = process.argv[2] === 'send' ? p2p.wantP2PSend(rest) : p2p.wantP2PGet(rest);
+  if (wantP2P) {
+    p2p.main([process.argv[2]].concat(rest));
+    return;
+  }
+  // 否则落到下方 yargs（MVP 的 send <zid> <msg> / get <cid>）
+}
+// 旧层级名提示（link / tailcat 均已撤掉，命令直接挂顶层）
+if (process.argv[2] === 'link' || process.argv[2] === 'tailcat') {
+  console.log('[zhixia] "' + process.argv[2] + '" 这一层已撤掉：命令直接挂顶层。');
+  console.log('        例: zhixia send 小美 "hi" / zhixia book add 小美 <tc地址> / zhixia key');
+  process.exit(0);
 }
 
 const cmds = require('../src/cli/commands/cli-commands');
@@ -137,16 +151,15 @@ yargs(hideBin(process.argv))
     handler: (argv) => cmds.bootstrapServer(argv.port, argv.host)
   })
 
-  // ========== P2P 链接：聊天 & 文件传输（第四传输层） ==========
-  // 实际执行走 bin/zhixia.js 顶部的独立解析器（link-cmd.main），这里只为 --help 展示
+  // ========== P2P 顶层命令：聊天 & 文件传输（第四传输层，不套中间层） ==========
+  // 实际执行走 bin/zhixia.js 顶部的独立解析器（p2p-cmd.main + send/get 路由），这里只为 --help 展示
   .command({
-    command: 'link [sub] [args...]',
-    describe: 'P2P chat & file transfer + contact book (stable identity, nickname→address)',
+    command: 'p2p-help',
+    describe: 'P2P 顶层命令速查：key / book / chat / inbox / files / send / send-file / get / ls / ping / last',
     builder: {},
     handler: () => {
-      console.log('zhixia link <sub> [args]   （P2P 聊天 & 文件传输，第四传输层）');
-      console.log('  key / book / chat / inbox / files / send / send-file / get / ls / ping / last');
-      console.log('  详见: zhixia link help');
+      const p2p = require('../src/cli/commands/p2p-cmd');
+      p2p.main(['help']);
     }
   })
 

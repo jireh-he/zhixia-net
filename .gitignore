@@ -10,9 +10,8 @@ zhixia-data/
 dist/
 coverage/
 
-# link P2P engine binary (auto-download, see scripts/install-tailcat.js)
+# P2P 顶层命令引擎二进制（auto-download，见 scripts/install-tailcat.js）
 bin/tailcat/
-# link runtime state: stable identity + contact book
-data/link-identity.json
-data/link-book.json
-data/tailcat.last-addr.json
+# P2P 运行时状态：稳定身份 + 通讯录
+data/p2p-identity.json
+data/p2p-book.json
