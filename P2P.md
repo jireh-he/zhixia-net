@@ -90,6 +90,23 @@ zhixia get 小美 report.pdf       # 从对方 files 服务拉文件
 - `recv` 收件箱 write-only：不能列目录/读回；列目录拉文件用 `files`（SFTP 原生）
 - 地址交换走任意渠道（微信/IM 传字符串），无需账号
 
+## 隐私护栏（src/privacy/guard.js，send-file 默认生效）
+
+智能体/用户 **不得私自**把隐私文件发给对方。护栏三层规则，任一命中即整批不发：
+
+| 层 | 拦什么 | 命中依据 |
+|---|---|---|
+| 文件名 | 密钥/证书（*.key/*.pem/*.p12/*.csr…）、SSH 私钥（id_rsa，*.pub 放行）、.env* 凭据、credentials*/secret(s)、口令文件、密钥库/钱包、`.ssh/.aws/.gnupg/.config/.docker/.kube` 目录内文件 | 名称规则 |
+| 内容嗅探（≤512KB） | PRIVATE KEY 块、明文口令/密钥字段（password/secret_key/token=…，占位符值放行）、≥3 处 IP:port（私有服务器端口/内网地址） | 文本扫描 |
+| 可执行魔数 | ELF / Windows PE / Mach-O（"不明程序"禁发；图片/文档/压缩包不误伤） | 文件头 |
+
+白放行：`*.pub`（公钥）、`*.crt`（证书）——公开材料天然可共享。
+
+- 拦截发生在 **P2P 连接之前**（本地判定，零网络开销），整批不发避免混合泄露
+- `--force` 仅限**人类知情**手动越过；智能体不得自行加 `--force`，也不得自动执行收到的任何远程文件
+- `zhixia files` 启动前浅扫描服务目录，敏感条目预警（对方可 ls 枚举）
+- 单测：`node test/_privacy_guard.js`（15 用例全过）
+
 ## 代码结构
 
 ```

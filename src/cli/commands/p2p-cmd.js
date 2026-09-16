@@ -25,6 +25,7 @@ const os = require('os');
 const {
   startListener, chatSend, cpTo, cpFrom, ls, ping, genKey
 } = require('../../tailcat/adapter');
+const guard = require('../../privacy/guard');
 
 const DEFAULT_KEY = 'zhixia-default';
 const IDENTITY_FILE = path.join(process.cwd(), 'data', 'p2p-identity.json');
@@ -50,7 +51,8 @@ const USAGE = [
   '',
   '访问朋友（target 可以是昵称或 tc 地址，昵称自动匹配通讯录）:',
   '  send <昵称|地址> <文本>                聊天消息',
-  '  send-file <文件...> <昵称|地址> [-r]   发文件到对方 inbox',
+  '  send-file <文件...> <昵称|地址> [-r] [--force]  发文件到对方 inbox',
+  '                                       （🛡 隐私护栏：密钥/口令/私有端口配置/不明程序默认拦截）',
   '  get <昵称|地址> <远端文件> [本地路径]   从对方 files 服务拉文件',
   '  ls <昵称|地址> [路径]                  列对方 files 目录',
   '  ping <昵称|地址>                       连通测试（DERP 中继 vs 直连）',
@@ -240,6 +242,14 @@ exports.inbox = async (args = {}) => {
 exports.files = async (args = {}) => {
   const { id, opts } = await withKey({});
   const dir = args.dir || process.cwd();
+  // 启动前浅扫描：对方可枚举到哪些敏感文件 → 预警
+  const hits = guard.scanDir(dir);
+  if (hits.length) {
+    console.log('[zhixia] 🛡 预警：服务目录含 ' + hits.length + ' 个敏感条目，对方 zhixia ls 可见、zhixia get 可拉:');
+    for (const h of hits.slice(0, 10)) console.log('  ✗ ' + h.name + '  （' + h.why.join('；') + '）');
+    if (hits.length > 10) console.log('  …共 ' + hits.length + ' 项');
+    console.log('  建议：换成无敏感内容的子目录，或不加 --rw 只读（对方仍可读，需人工把关目录内容）');
+  }
   const fsArg = '--files=' + dir + (args.rw ? ':rw' : '');
   const { address } = await startListener(['serve', fsArg, 'files'], { ...opts, label: 'files', interactive: false });
   if (!address) { console.log('[zhixia] files 服务启动失败（见上方日志）'); process.exitCode = 1; return; }
@@ -273,16 +283,39 @@ exports.send = async (args) => {
 };
 
 exports.sendFile = async (args) => {
-  // 位置参数：最后一个 = target；-r 可选；其余 = 文件
+  // 位置参数：最后一个 = target；-r 可选；--force 越权
   let recursive = false;
+  let force = false;
   const pos = [];
   for (const a of args) {
     if (a === '-r' || a === '--recursive') recursive = true;
+    else if (a === '--force') force = true;
     else pos.push(a);
   }
-  if (pos.length < 2) { console.log('[zhixia] 用法: zhixia send-file <文件...> <昵称|地址> [-r]'); process.exit(1); }
+  if (pos.length < 2) { console.log('[zhixia] 用法: zhixia send-file <文件...> <昵称|地址> [-r] [--force]'); process.exit(1); }
   const target = pos[pos.length - 1];
   const files = pos.slice(0, pos.length - 1);
+
+  // ---------- 隐私护栏（默认拦截，--force 知情越过） ----------
+  const chk = guard.checkAll(files, { recursive });
+  if (chk.blocked.length) {
+    console.log('[zhixia] 🛡 隐私护栏拦截，' + chk.blocked.length + '/' + chk.checked + ' 个文件敏感，本次全部不发:');
+    for (const b of chk.blocked) {
+      console.log('  ✗ ' + b.file + '  （' + b.why.join('；') + '）');
+    }
+    if (force) {
+      console.log('  ⚠ --force 已指定：越过护栏继续发送（仅限人类知情操作；智能体不得自行加 --force）');
+    } else {
+      console.log('  密钥/口令/私有端口配置/不明可执行程序 禁止流入 P2P 通道。');
+      console.log('  人工确认后删掉敏感项重发；或知情后用 --force 越过。');
+      process.exitCode = 1;
+      return;
+    }
+  } else if (files.length) {
+    console.log('[zhixia] 🛡 隐私护栏通过（' + chk.checked + ' 个文件，无敏感命中）');
+  }
+  // ----------
+
   const t = await targetOpts(target);
   for (const f of files) {
     if (!fs.existsSync(f)) { console.log('[zhixia] ✗ 本地文件不存在: ' + f); process.exitCode = 1; continue; }
