@@ -20,7 +20,10 @@ const path = require('path');
 const os = require('os');
 
 const REPO_ROOT = path.join(__dirname, '..', '..');
-const ADDR_RE = /listening with new address:\s*(\S+)/;
+// 稳定 key 的输出是 "listening with saved key \"xxx\": tcp..."，
+// 一次性的是 "listening with new address: tcp..."——两种都得匹配。
+// 最稳做法：抓监听行里以 tc 开头、足够长的 token（地址本体），不依赖前缀措辞。
+const ADDR_RE = /\b(tc[A-Za-z0-9_-]{20,})/;
 const ADDR_PREFIX_RE = /^tc[A-Za-z0-9_-]+$/;
 
 function archTag() {
@@ -76,21 +79,68 @@ function ensureBin() {
 
 function assertAddr(addr, action) {
   if (!ADDR_PREFIX_RE.test(String(addr || ''))) {
-    console.log('[zhixia] "' + String(addr) + '" 不像 tailcat 地址（应以 tc 开头），' + action + ' 无法执行。');
-    console.log('        先在对端跑: zhixia tailcat server / recv / serve-files，把打印的 tc 地址传过来。');
+    console.log('[zhixia] "' + String(addr) + '" 不像 P2P 地址（应以 tc 开头），' + action + ' 无法执行。');
+    console.log('        先在对端跑: zhixia link chat / inbox / files，把打印的 tc 地址传过来；或用 zhixia link book 存昵称。');
     process.exit(1);
   }
 }
 
+// ---- 稳定身份（genkey）----
+// tailcat genkey 生成的持久 key（~/.config/tailcat/keys/<name>.private.json）
+// 产出的 tc 地址是**永久稳定的**（地址 = key 的确定性函数），
+// 这就是通讯录「昵称 → 地址」能一次存永久有效的根基。
+
+/** 运行 genkey，返回 { ok, keyName, address, stderr, existed } */
+function genKey(keyName, { fixedRegion = true, force = false } = {}) {
+  return new Promise((resolve) => {
+    const bin = ensureBin();
+    const args = ['genkey', '--key=' + keyName];
+    if (fixedRegion) args.push('--fixed-region');
+    if (force) args.push('--force');
+    const child = spawn(bin, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+    let out = '';
+    let err = '';
+    child.stdout.on('data', (d) => { out += d.toString(); });
+    child.stderr.on('data', (d) => { err += d.toString(); });
+    const timer = setTimeout(() => {
+      try { child.kill('SIGTERM'); } catch (e) { /* ignore */ }
+      resolve({ ok: false, keyName, address: null, stderr: err, error: 'timeout' });
+    }, 60000);
+    child.on('error', (e) => { clearTimeout(timer); resolve({ ok: false, keyName, address: null, stderr: err, error: e.message }); });
+    child.on('close', (code) => {
+      clearTimeout(timer);
+      // genkey 已存在时 RC 仍为 0，但输出里没有地址（只有 "already exists" 日志）——必须先判 existed
+      const blob = out + err;
+      if (/already exists/i.test(blob)) {
+        resolve({ ok: false, keyName, address: null, existed: true, stderr: err });
+        return;
+      }
+      if (code === 0) {
+        // 新建成功：genkey 的最后一行输出就是稳定 tc 地址
+        const lines = out.trim().split('\n').filter(Boolean);
+        const address = lines.length ? lines[lines.length - 1].trim() : '';
+        resolve({ ok: ADDR_PREFIX_RE.test(address), keyName, address, existed: false, stderr: err });
+      } else {
+        resolve({ ok: false, keyName, address: null, existed: false, stderr: err });
+      }
+    });
+  });
+}
+
 /**
- * 一次性聊天：把 text 发给对端监听侧（对端跑着 `zhixia tailcat server` / 裸 tailcat）。
+ * 一次性聊天：把 text 发给对端监听侧（对端跑着 `zhixia link chat` / 裸 tailcat）。
+ * @param {object} opts { timeoutMs, keyName }
  * @returns {Promise<{ok, code, stdout, stderr, error?}>}
  */
-function chatSend(addr, text, timeoutMs = 60000) {
+function chatSend(addr, text, opts = {}) {
+  const timeoutMs = opts.timeoutMs || 60000;
   return new Promise((resolve) => {
     const bin = ensureBin();
     assertAddr(addr, 'chat');
-    const child = spawn(bin, [addr], { stdio: ['pipe', 'pipe', 'pipe'] });
+    const args = [];
+    if (opts.keyName) args.push('--key=' + opts.keyName);
+    args.push(addr);
+    const child = spawn(bin, args, { stdio: ['pipe', 'pipe', 'pipe'] });
     let out = '';
     let err = '';
     let settled = false;
@@ -112,23 +162,29 @@ function chatSend(addr, text, timeoutMs = 60000) {
 }
 
 /**
- * 启动 tailcat 监听器并等 tc 地址就绪。
- * @param {string[]} tailcatArgs  tailcat 子命令参数，如 [] / ['recv', dir] / ['serve', 'files', '--files=' + dir]
- * @param {object} opts { label, timeoutMs, interactive }
+ * 启动监听器并等 tc 地址就绪。
+ * @param {string[]} subArgs  子命令参数（不含全局 --key），如 [] / ['recv', dir] / ['serve', fsArg, 'files']
+ * @param {object} opts { label, timeoutMs, interactive, keyName }
  * @returns {Promise<{child, address, stop}>}
- *   - interactive=true 时 stdin 直通（`server` 聊天用：连上后可双向打字）
+ *   - keyName: 注入 `--key=<name>`（全局 flag，插在子命令前）用稳定身份 → 地址永久稳定
+ *   - interactive=true 时 stdin 直通（chat 用：连上后可双向打字）
  *   - 地址解析失败/进程早退 → address=null（stderr 已实时转给终端）
  */
-function startListener(tailcatArgs, { label = 'tailcat', timeoutMs = 45000, interactive = false } = {}) {
+function startListener(subArgs, opts = {}) {
+  const { label = 'link', timeoutMs = 45000, interactive = false, keyName } = opts;
   return new Promise((resolve) => {
     const bin = ensureBin();
-    const child = spawn(bin, tailcatArgs, { stdio: [interactive ? 'inherit' : 'ignore', 'pipe', 'pipe'] });
+    const args = keyName ? ['--key=' + keyName] : [];
+    args.push(...subArgs);
+    const child = spawn(bin, args, { stdio: [interactive ? 'inherit' : 'ignore', 'pipe', 'pipe'] });
     let address = null;
     let settled = false;
+    let tail = ''; // 滑动窗口：地址 token 可能被 data chunk 截断，累积尾部再匹配
     const stop = () => { try { child.kill('SIGTERM'); } catch (e) { /* ignore */ } };
     const done = (addr) => { if (!settled) { settled = true; resolve({ child, address: addr, stop }); } };
     const scan = (s) => {
-      const m = s.match(ADDR_RE);
+      tail = (tail + s).slice(-600); // 保留最近 600 字符，防止无界增长
+      const m = tail.match(ADDR_RE);
       if (m) address = m[1];
     };
     child.stdout.on('data', (d) => { const s = d.toString(); process.stdout.write(s); scan(s); });
@@ -144,13 +200,15 @@ function startListener(tailcatArgs, { label = 'tailcat', timeoutMs = 45000, inte
 
 /**
  * 传文件：tailcat cp [ -r ] <local> <addr>:  （内部走系统 scp 的进度显示）
+ * @param {object} opts { recursive, timeoutMs, keyName }
  * @returns {Promise<{ok, code}>}
  */
-function cpTo(addr, localFile, { recursive, timeoutMs = 300000 } = {}) {
+function cpTo(addr, localFile, opts = {}) {
+  const { recursive, timeoutMs = 300000, keyName } = opts;
   return new Promise((resolve) => {
     const bin = ensureBin();
     assertAddr(addr, 'send');
-    const args = ['cp'];
+    const args = withKey(keyName, ['cp']);
     if (recursive) args.push('-r');
     args.push(localFile, addr + ':');
     const child = spawn(bin, args, { stdio: 'inherit' });
@@ -163,13 +221,17 @@ function cpTo(addr, localFile, { recursive, timeoutMs = 300000 } = {}) {
 
 /**
  * 拉文件：tailcat cp <addr>:<remote> [local]
+ * @param {object} opts { local, keyName }
  * @returns {Promise<{ok, code, error?}>}
  */
-function cpFrom(addr, remote, local = '.') {
+function cpFrom(addr, remote, opts = {}) {
+  const local = opts.local || '.';
+  const keyName = opts.keyName;
   return new Promise((resolve) => {
     const bin = ensureBin();
     assertAddr(addr, 'get');
-    const child = spawn(bin, ['cp', addr + ':' + remote, local], { stdio: 'inherit' });
+    const args = withKey(keyName, ['cp', addr + ':' + remote, local]);
+    const child = spawn(bin, args, { stdio: 'inherit' });
     let settled = false;
     const timer = setTimeout(() => { if (!settled) { settled = true; try { child.kill('SIGTERM'); } catch (e) {} resolve({ ok: false, code: -1, error: 'timeout' }); } }, 300000);
     child.on('error', (e) => { clearTimeout(timer); if (!settled) { settled = true; resolve({ ok: false, code: -1, error: e.message }); } });
@@ -178,11 +240,11 @@ function cpFrom(addr, remote, local = '.') {
 }
 
 /** 列目录：tailcat ls -l <addr> [path]（SFTP 原生，无需对端装 OpenSSH） */
-function ls(addr, remotePath) {
+function ls(addr, remotePath, keyName) {
   return new Promise((resolve) => {
     const bin = ensureBin();
     assertAddr(addr, 'ls');
-    const args = ['ls', '-l', addr];
+    const args = withKey(keyName, ['ls', '-l', addr]);
     if (remotePath) args.push(remotePath);
     const child = spawn(bin, args, { stdio: 'inherit' });
     let settled = false;
@@ -193,16 +255,22 @@ function ls(addr, remotePath) {
 }
 
 /** 连通性测试：tailcat ping <addr>（每次 pong 显示走 DERP 还是直连） */
-function ping(addr) {
+function ping(addr, keyName) {
   return new Promise((resolve) => {
     const bin = ensureBin();
     assertAddr(addr, 'ping');
-    const child = spawn(bin, ['ping', addr], { stdio: 'inherit' });
+    const args = withKey(keyName, ['ping', addr]);
+    const child = spawn(bin, args, { stdio: 'inherit' });
     let settled = false;
     const timer = setTimeout(() => { if (!settled) { settled = true; try { child.kill('SIGTERM'); } catch (e) {} resolve({ ok: false, code: -1, error: 'timeout' }); } }, 120000);
     child.on('error', (e) => { clearTimeout(timer); if (!settled) { settled = true; resolve({ ok: false, code: -1, error: e.message }); } });
     child.on('close', (code) => { clearTimeout(timer); if (!settled) { settled = true; resolve({ ok: code === 0, code }); } });
   });
+}
+
+/** 全局 flag 前缀：--key 是 tailcat 顶层 flag，必须插在子命令之前 */
+function withKey(keyName, subArgs) {
+  return keyName ? ['--key=' + keyName].concat(subArgs) : subArgs.slice();
 }
 
 exports.findBinary = findBinary;
@@ -213,3 +281,4 @@ exports.cpTo = cpTo;
 exports.cpFrom = cpFrom;
 exports.ls = ls;
 exports.ping = ping;
+exports.genKey = genKey;

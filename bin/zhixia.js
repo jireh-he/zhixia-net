@@ -2,12 +2,17 @@
 const yargs = require('yargs/yargs');
 const { hideBin } = require('yargs/helpers');
 
-// tailcat 子命令走独立解析器（yargs strict 模式与 variadic positional 不兼容，
-// 且 ato Node 16 上保持零 yargs 依赖路径）
-if (process.argv[2] === 'tailcat') {
-  const tc = require('../src/cli/commands/tailcat-cmd');
-  tc.main(process.argv.slice(3));
+// P2P 链接子命令（zhixia link）走独立解析器
+// （yargs strict 模式与 variadic positional 不兼容，且 ato Node 16 上保持零 yargs 依赖路径）
+if (process.argv[2] === 'link') {
+  const link = require('../src/cli/commands/link-cmd');
+  link.main(process.argv.slice(3));
   return;
+}
+// 旧名 tailcat 已更名 link
+if (process.argv[2] === 'tailcat') {
+  console.log('[zhixia] 命令已更名: "zhixia tailcat ..." → "zhixia link ..."（tailcat 仅是引擎名，不再是命令名）');
+  process.exit(1);
 }
 
 const cmds = require('../src/cli/commands/cli-commands');
@@ -132,23 +137,16 @@ yargs(hideBin(process.argv))
     handler: (argv) => cmds.bootstrapServer(argv.port, argv.host)
   })
 
-  // ========== tailcat P2P 聊天 & 文件传输（第四传输层） ==========
-  // 实际执行走 bin/zhixia.js 顶部的独立解析器（tailcat-cmd.main），这里只为 --help 展示
+  // ========== P2P 链接：聊天 & 文件传输（第四传输层） ==========
+  // 实际执行走 bin/zhixia.js 顶部的独立解析器（link-cmd.main），这里只为 --help 展示
   .command({
-    command: 'tailcat [sub] [args...]',
-    describe: 'P2P chat & file transfer (tailcat engine: WireGuard + DERP NAT traversal)',
+    command: 'link [sub] [args...]',
+    describe: 'P2P chat & file transfer + contact book (stable identity, nickname→address)',
     builder: {},
     handler: () => {
-      console.log('zhixia tailcat <sub> [args]');
-      console.log('  server               起 P2P 聊天监听器（打印 tc 地址，连上后双向打字）');
-      console.log('  recv [dir]           文件收件箱（write-only drop box，默认 ./zhixia-inbox）');
-      console.log('  serve-files [dir] [--rw]  文件服务（files SFTP，默认只读）');
-      console.log('  send <addr> <text>   一次性聊天消息发给对端 server');
-      console.log('  send-file [-r] <files...> <addr>  发文件给对端 recv 收件箱');
-      console.log('  get <addr> <remote> [local]  从对端 files 服务拉文件');
-      console.log('  ls <addr> [path]     列对端目录（SFTP）');
-      console.log('  ping <addr>          连通测试（DERP vs 直连）');
-      console.log('  last                 显示本端最近记住的 tc 地址');
+      console.log('zhixia link <sub> [args]   （P2P 聊天 & 文件传输，第四传输层）');
+      console.log('  key / book / chat / inbox / files / send / send-file / get / ls / ping / last');
+      console.log('  详见: zhixia link help');
     }
   })
 

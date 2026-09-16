@@ -10,7 +10,9 @@ zhixia-data/
 dist/
 coverage/
 
-# tailcat engine (auto-download, see scripts/install-tailcat.js)
+# link P2P engine binary (auto-download, see scripts/install-tailcat.js)
 bin/tailcat/
-# tailcat runtime state
+# link runtime state: stable identity + contact book
+data/link-identity.json
+data/link-book.json
 data/tailcat.last-addr.json
