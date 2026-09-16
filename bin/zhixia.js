@@ -1,6 +1,7 @@
 #!/usr/bin/env node
-const yargs = require('yargs/yargs');
-const { hideBin } = require('yargs/helpers');
+// 注意：yargs 延迟加载（MVP 层才用）。P2P 顶层命令（key/book/chat/inbox/
+// files/send-file/last/ls/ping/send/get→P2P）零 npm 依赖，纯 stdlib + tailcat
+// 静态二进制 —— fresh clone 不跑 npm install 也能用 P2P（见 skill/zhixia-p2p）。
 
 // ========== P2P 顶层命令（第四传输层，不套中间层） ==========
 // P2P 专有命令（与 MVP 层不撞名）直接走独立解析器
@@ -9,7 +10,7 @@ const P2P_OWN = ['key', 'book', 'chat', 'inbox', 'files', 'send-file', 'last', '
 if (P2P_OWN.includes(process.argv[2])) {
   const p2p = require('../src/cli/commands/p2p-cmd');
   p2p.main(process.argv.slice(2));
-  return;
+  return; // CJS 顶层 return 结束模块，事件循环自然收尾（监听类命令靠活跃句柄保活，不能 process.exit）
 }
 // send / get 与 MVP 层同名 → 按目标形态路由：tc 地址/通讯录昵称 → P2P；zid/CID → MVP
 if (process.argv[2] === 'send' || process.argv[2] === 'get') {
@@ -28,6 +29,15 @@ if (process.argv[2] === 'link' || process.argv[2] === 'tailcat') {
   console.log('        例: zhixia send 小美 "hi" / zhixia book add 小美 <tc地址> / zhixia key');
   process.exit(0);
 }
+// P2P 帮助（也走独立解析器，零 npm 依赖）
+if (process.argv[2] === 'p2p-help' || (process.argv[2] === 'help' && process.argv[3] === 'p2p')) {
+  require('../src/cli/commands/p2p-cmd').main(['help']);
+  return;
+}
+
+// ---- P2P 分支之外 → MVP 层（yargs 在此才加载） ----
+const yargs = require('yargs/yargs');
+const { hideBin } = require('yargs/helpers');
 
 const cmds = require('../src/cli/commands/cli-commands');
 const statusCmd = require('../src/cli/commands/status');

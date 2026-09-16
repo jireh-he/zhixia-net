@@ -81,6 +81,16 @@ function main() {
     }
     console.log('[install-tailcat] downloaded ' + size + 'B from ' + url.split('/')[2]);
     downloaded = true;
+    // 校验和针对下载的压缩包（checksums.txt 里的是 tarball 的 hash，不是解包后的二进制）
+    if (expected) {
+      const c = spawnSync('sha256sum', [blob], { stdio: 'pipe' });
+      const actual = c.stdout.toString().trim().split(/\s+/)[0];
+      if (actual !== expected) {
+        console.error('[install-tailcat] SHA256 MISMATCH (tarball): actual=' + actual + ' expected=' + expected);
+        process.exit(1);
+      }
+      console.log('[install-tailcat] tarball sha256 OK: ' + expected.slice(0, 16) + '...');
+    }
     // 解包
     if (ext === 'tar.gz') spawnSync('tar', ['-xzf', blob, '-C', outDir], { stdio: 'inherit' });
     else spawnSync('unzip', ['-o', blob, '-d', outDir], { stdio: 'inherit' });
@@ -96,17 +106,6 @@ function main() {
     console.error('[install-tailcat] 全部下载源失败。手工：');
     console.error('  curl -L ' + base);
     process.exit(1);
-  }
-
-  // 校验
-  if (expected) {
-    const c = spawnSync('sha256sum', [final], { stdio: 'pipe' });
-    const actual = c.stdout.toString().trim().split(/\s+/)[0];
-    if (actual !== expected) {
-      console.error('[install-tailcat] SHA256 MISMATCH: actual=' + actual + ' expected=' + expected);
-      process.exit(1);
-    }
-    console.log('[install-tailcat] sha256 OK: ' + expected.slice(0, 16) + '...');
   }
 
   console.log('[install-tailcat] 安装完成: ' + final);
