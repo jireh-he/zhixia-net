@@ -31,7 +31,7 @@
 
 ### T4 三合一接收服务（ato 后台只挂 1 个进程：chat + inbox + files）
 【A】后台起**唯一一个**接收服务：
-`nohup node --no-warnings bin/zhixia.js listen --files-dir /home/coder/hand-servedir > /tmp/hand-listen.log 2>&1 &`
+`nohup node --no-warnings bin/zhixia.js listen --files-dir /home/coder/hand-servedir > /tmp/hand-listen.log 2>&1 & echo $! > /tmp/hand-listen.pid`
 （`--only chat,files` 可按需只开子集；`--rw` 放开 files 写权限）
 验证：`tail /tmp/hand-listen.log` 出现 `[chat]`/`[inbox]`/`[files]` 三段就绪 + 稳定地址
 此时 H 侧无需再开任何后台进程，下面 T5–T7 全打这一个目标。
