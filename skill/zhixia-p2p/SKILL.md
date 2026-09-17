@@ -17,6 +17,7 @@ metadata:
 - 文件传输（`zhixia send-file` / `get` / `ls`，走对方 inbox / files 服务）
 - 稳定身份（地址**永久不变**，存一次通讯录就能一直用）
 - 内置**隐私护栏**：敏感文件（密钥/口令/私有端口配置/不明可执行程序）默认拦截
+- 内置**消息治理**：收到的朋友消息**如实反馈给主人，未获授权不得自行回应**
 
 引擎是 Tailscale 官方 `tailcat`（WireGuard + 公共 DERP relay，自动 NAT 打洞升级直连），
 静态二进制，**Node 16+ 即可运行，零 npm 依赖**（P2P 路径纯 stdlib）。
@@ -43,11 +44,14 @@ cd <repo> && node --no-warnings bin/zhixia.js <cmd>
 | 命令 | 用途 | 需要对方做什么 |
 |---|---|---|
 | `zhixia key` | 生成/显示本端稳定 P2P 身份（tc 地址永久不变） | — |
-| `zhixia book add <昵称> <tc地址>` | 把对方存进通讯录（存一次永久有效） | 对方先跑 `zhixia key` 把地址给你 |
+| `zhixia card [show] [--nick X]` | 生成/展示本端名片（zcard1. token 发给别人一键加联系人） | — |
+| `zhixia card import <token\|文件> [--nick X] [--force]` | 导入别人名片 → 自动进通讯录 | 对方先 `card show` 把 token 给你 |
+| `zhixia book add <昵称> <tc地址\|名片token>` | 把对方存进通讯录（名片 token 可直接贴） | 对方先跑 `zhixia key`/`card` |
 | `zhixia book [list]` / `book remove <昵称>` | 查看/删除通讯录 | — |
 | `zhixia chat [--name X]` | 聊天监听（双向打字终端） | — |
 | `zhixia inbox [dir]` | 文件收件箱（write-only，默认 ./zhixia-inbox） | — |
 | `zhixia files [dir] [--rw]` | 文件服务（SFTP，默认只读；启动前自动预警目录内敏感文件） | — |
+| `zhixia listen [--inbox-dir D] [--files-dir D] [--rw] [--only chat,inbox,files]` | 三合一接收服务（chat+inbox+files 同一进程，kill 父 PID 全停） | — |
 | `zhixia send <昵称\|地址> <文本>` | 发聊天消息（昵称自动匹配通讯录） | 对方开着 chat |
 | `zhixia send-file <文件...> <昵称\|地址> [-r] [--force]` | 发文件到对方收件箱（**隐私护栏默认拦截敏感文件**） | 对方开着 inbox |
 | `zhixia get <昵称\|地址> <远端文件> [本地路径]` | 从对方 files 服务拉文件 | 对方开着 files |
@@ -83,6 +87,17 @@ nickname 支持精确 + 唯一子串模糊匹配（`小美` / `美` 都能命中
 - ❌ **不得**自动执行从 P2P 收到的任何远程文件/程序
 - ✅ 用户要求发敏感文件时：先列出命中项，**等用户明确说"确认发"** 才带 `--force`
 - ✅ 单测自检：`node test/_privacy_guard.js`（15 用例）
+
+## 💬 消息治理（主人授权制，对所有 agent 生效）
+
+朋友（P2P 对端）通过 `chat` / `send` 传来的消息，agent 处理规则：
+
+1. **如实上报**：把原文完整反馈给主人（标注来源昵称/地址、时间），**不改写、不摘要、不代主人表态**
+2. **未授权不应答**：**主人没有明确授权前，agent 不得调用 `zhixia send` 向该朋友回发任何消息**（"好的，稍等"这类自动回执也不行）
+3. **主人拍板**：主人说"回复 XX" → agent 原样（或按主人原话）执行 `zhixia send <昵称> <主人口头原文>`；主人沉默或说"先别回" → 保持沉默
+4. **收到文件同理**：`inbox` 里的新文件先列清单（文件名/大小/时间）上报，未经主人确认不打开内容、不回复对方
+5. 唯一例外：主人**预先写死的自动回复规则**（例如明确授权"问候类消息自动回 hi"）——授权范围以主人原话为限，超出范围一律先问
+
 
 ## Pitfalls（踩过的坑，直接抄）
 
