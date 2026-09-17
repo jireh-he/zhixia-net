@@ -6,7 +6,7 @@
 // ========== P2P 顶层命令（第四传输层，不套中间层） ==========
 // P2P 专有命令（与 MVP 层不撞名）直接走独立解析器
 // （yargs strict 模式与 variadic positional 不兼容，且 ato Node 16 上保持零 yargs 依赖路径）
-const P2P_OWN = ['key', 'book', 'chat', 'inbox', 'files', 'send-file', 'last', 'ls', 'ping'];
+const P2P_OWN = ['key', 'book', 'chat', 'inbox', 'files', 'listen', 'send-file', 'last', 'ls', 'ping'];
 if (P2P_OWN.includes(process.argv[2])) {
   const p2p = require('../src/cli/commands/p2p-cmd');
   p2p.main(process.argv.slice(2));
@@ -165,7 +165,7 @@ yargs(hideBin(process.argv))
   // 实际执行走 bin/zhixia.js 顶部的独立解析器（p2p-cmd.main + send/get 路由），这里只为 --help 展示
   .command({
     command: 'p2p-help',
-    describe: 'P2P 顶层命令速查：key / book / chat / inbox / files / send / send-file / get / ls / ping / last',
+    describe: 'P2P 顶层命令速查：key / book / chat / inbox / files / listen / send / send-file / get / ls / ping / last',
     builder: {},
     handler: () => {
       const p2p = require('../src/cli/commands/p2p-cmd');

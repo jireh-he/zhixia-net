@@ -171,7 +171,7 @@ function chatSend(addr, text, opts = {}) {
  *   - 地址解析失败/进程早退 → address=null（stderr 已实时转给终端）
  */
 function startListener(subArgs, opts = {}) {
-  const { label = 'link', timeoutMs = 45000, interactive = false, keyName } = opts;
+  const { label = 'link', timeoutMs = 45000, interactive = false, keyName, prefix = null } = opts;
   return new Promise((resolve) => {
     const bin = ensureBin();
     const args = keyName ? ['--key=' + keyName] : [];
@@ -187,8 +187,19 @@ function startListener(subArgs, opts = {}) {
       const m = tail.match(ADDR_RE);
       if (m) address = m[1];
     };
-    child.stdout.on('data', (d) => { const s = d.toString(); process.stdout.write(s); scan(s); });
-    child.stderr.on('data', (d) => { const s = d.toString(); process.stderr.write(s); scan(s); });
+    // prefix 模式（listen 多路合一）：按行缓冲，每行加前缀，避免多监听输出交错
+    let lineBuf = '';
+    const emit = (stream, s) => {
+      if (!prefix) { stream.write(s); return; }
+      lineBuf += s;
+      let i;
+      while ((i = lineBuf.indexOf('\n')) !== -1) {
+        stream.write(prefix + ' ' + lineBuf.slice(0, i) + '\n');
+        lineBuf = lineBuf.slice(i + 1);
+      }
+    };
+    child.stdout.on('data', (d) => { const s = d.toString(); emit(process.stdout, s); scan(s); });
+    child.stderr.on('data', (d) => { const s = d.toString(); emit(process.stderr, s); scan(s); });
     child.on('exit', (code) => { done(address); });
     const t0 = Date.now();
     const timer = setInterval(() => {

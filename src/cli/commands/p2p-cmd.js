@@ -33,7 +33,7 @@ const BOOK_FILE = path.join(process.cwd(), 'data', 'p2p-book.json');
 const KEY_DIR = path.join(os.homedir(), '.config', 'tailcat', 'keys');
 
 // P2P 专有命令（与 MVP 层无冲突，bin/zhixia.js 直接拦截这些词）
-const P2P_OWN = ['key', 'book', 'chat', 'inbox', 'files', 'send-file', 'last', 'ls', 'ping'];
+const P2P_OWN = ['key', 'book', 'chat', 'inbox', 'files', 'listen', 'send-file', 'last', 'ls', 'ping'];
 
 const USAGE = [
   'zhixia P2P 顶层命令（第四传输层，昵称自动匹配地址）:',
@@ -48,6 +48,9 @@ const USAGE = [
   '  chat [--name X]             聊天监听（连上后双向打字；一次性会话）',
   '  inbox [dir]                 文件收件箱（write-only，默认 ./zhixia-inbox）',
   '  files [dir] [--rw]          文件服务（SFTP，默认只读）',
+  '  listen [--inbox-dir D] [--files-dir D] [--rw] [--only chat,files]',
+  '                              三合一接收服务：chat+inbox+files 同一进程',
+  '                              （接收端后台只挂这一个；kill 该 PID 全停）',
   '',
   '访问朋友（target 可以是昵称或 tc 地址，昵称自动匹配通讯录）:',
   '  send <昵称|地址> <文本>                聊天消息',
@@ -259,6 +262,76 @@ exports.files = async (args = {}) => {
   console.log('朋友拉取: zhixia get <你的昵称/地址> <文件名>');
 };
 
+// ---------- listen：三合一接收服务（chat + inbox + files 同一进程） ----------
+/**
+ * 一个 zhixia 进程内部同时拉起 chat/inbox/files 三路 tailcat 子监听，
+ * 接收端只需一个 nohup 后台进程；Ctrl+C / kill 父进程统一收割三路。
+ * 输出按行加 [chat]/[inbox]/[files] 前缀，互不搅和。
+ * @param {object} args { inboxDir?, filesDir?, rw?, only?: string[] }
+ */
+exports.listen = async (args = {}) => {
+  const { id } = await withKey({});
+  const inboxDir = args.inboxDir || path.join(process.cwd(), 'zhixia-inbox');
+  const filesDir = args.filesDir || process.cwd();
+  if (!fs.existsSync(inboxDir)) fs.mkdirSync(inboxDir, { recursive: true });
+
+  // files 路：服务目录先过 guard 浅扫描（与 files 命令同口径）
+  const hits = guard.scanDir(filesDir);
+  if (hits.length) {
+    console.log('[zhixia] 🛡 预警：files 服务目录含 ' + hits.length + ' 个敏感条目（对方 ls 可见 / get 可拉）:');
+    for (const h of hits.slice(0, 5)) console.log('  ✗ ' + h.name + '  （' + h.why.join('；') + '）');
+    if (hits.length > 5) console.log('  …共 ' + hits.length + ' 项，建议换干净子目录');
+  }
+
+  const wanted = args.only && args.only.length ? args.only : ['chat', 'inbox', 'files'];
+  const specs = [
+    {
+      name: 'chat',
+      sub: [],
+      start: (prefix) => startListener([], { keyName: id.keyName, label: 'chat', interactive: true, prefix }),
+      hint: '聊天（对端: zhixia send <你的昵称> "..."）',
+    },
+    {
+      name: 'inbox',
+      sub: ['recv', inboxDir],
+      start: (prefix) => startListener(['recv', inboxDir], { keyName: id.keyName, label: 'inbox', interactive: false, prefix }),
+      hint: '收件箱 → ' + inboxDir + '（对端: zhixia send-file <文件> <你的昵称>）',
+    },
+    {
+      name: 'files',
+      sub: ['serve', '--files=' + filesDir + (args.rw ? ':rw' : ''), 'files'],
+      start: (prefix) => startListener(['serve', '--files=' + filesDir + (args.rw ? ':rw' : ''), 'files'], { keyName: id.keyName, label: 'files', interactive: false, prefix }),
+      hint: '文件服务 ' + (args.rw ? '[rw]' : '[ro]') + ' → ' + filesDir + '（对端: zhixia ls / get <你的昵称>）',
+    },
+  ].filter(s => wanted.includes(s.name));
+
+  console.log('[zhixia] listen 启动: ' + specs.map(s => s.name).join(' + '));
+  const handles = [];
+  let stopping = false;
+  const stopAll = () => {
+    if (stopping) return;
+    stopping = true;
+    for (const h of handles) { try { h.stop(); } catch (e) { /* ignore */ } }
+  };
+  process.on('SIGINT', () => { console.log('\n[zhixia] Ctrl+C，正在停止全部监听（chat/inbox/files）...'); stopAll(); process.exit(0); });
+  process.on('SIGTERM', () => { console.log('\n[zhixia] 收到 SIGTERM，正在停止全部监听...'); stopAll(); process.exit(0); });
+
+  for (const s of specs) {
+    const h = await s.start('[' + s.name + ']');
+    handles.push(h);
+    if (!h.address) console.log('[zhixia] ⚠ [' + s.name + '] 未能解析地址（见上方日志），其余路继续运行');
+  }
+
+  console.log('');
+  console.log('┌──────────────────────────────────────────┐');
+  console.log('│ zhixia listen — 三合一 P2P 接收服务      │');
+  console.log('└──────────────────────────────────────────┘');
+  for (const s of specs) console.log('  ' + s.hint);
+  console.log('本端稳定地址: ' + id.address);
+  console.log('（单进程承载全部监听；kill 本进程 PID 即同时停掉全部；Ctrl+C 前台同理）');
+  // 三路子进程是 event loop 活跃句柄：都活着则父进程保活；全退则父进程自然结束
+};
+
 // ---------- 访问朋友（昵称自动匹配） ----------
 async function targetOpts(target) {
   const { addr, via } = resolveTarget(target);
@@ -396,6 +469,14 @@ exports.main = (argv) => {
       break;
     case 'files':
       p = exports.files({ dir: rest.find(x => !x.startsWith('-')), rw: rest.includes('--rw') || rest.includes('-rw') });
+      break;
+    case 'listen':
+      p = exports.listen({
+        inboxDir: pickFlag(rest, ['--inbox-dir']),
+        filesDir: pickFlag(rest, ['--files-dir']),
+        rw: rest.includes('--rw') || rest.includes('-rw'),
+        only: pickFlag(rest, ['--only']) ? pickFlag(rest, ['--only']).split(',').map(x => x.trim()).filter(Boolean) : null,
+      });
       break;
     case 'send':
       p = exports.send(rest);

@@ -28,6 +28,9 @@ zhixia book [list]
 zhixia chat [--name X]            聊天监听（一次性会话，连上后双向打字）
 zhixia inbox [dir]               文件收件箱（write-only drop box，默认 ./zhixia-inbox）
 zhixia files [dir] [--rw]        文件服务（SFTP，默认只读）
+zhixia listen [--inbox-dir D] [--files-dir D] [--rw] [--only chat,files]
+                                 三合一接收服务：chat+inbox+files 同一进程
+                                 （接收端后台只挂这一个；kill 该 PID 全停）
 
 # 访问朋友（target 可以是昵称或 tc 地址，昵称自动匹配通讯录）
 zhixia send <昵称|地址> <文本>
