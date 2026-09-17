@@ -33,16 +33,19 @@ const BOOK_FILE = path.join(process.cwd(), 'data', 'p2p-book.json');
 const KEY_DIR = path.join(os.homedir(), '.config', 'tailcat', 'keys');
 
 // P2P 专有命令（与 MVP 层无冲突，bin/zhixia.js 直接拦截这些词）
-const P2P_OWN = ['key', 'book', 'chat', 'inbox', 'files', 'listen', 'send-file', 'last', 'ls', 'ping'];
+const P2P_OWN = ['key', 'book', 'chat', 'inbox', 'files', 'listen', 'card', 'send-file', 'last', 'ls', 'ping'];
 
 const USAGE = [
   'zhixia P2P 顶层命令（第四传输层，昵称自动匹配地址）:',
   '',
-  '身份 / 通讯录:',
+  '身份 / 通讯录 / 名片:',
   '  key                         生成/显示本端稳定 P2P 身份（地址永久不变）',
-  '  book add <昵称> <tc地址>    把朋友存进通讯录（对方先跑 zhixia key 把他的稳定地址给你）',
+  '  book add <昵称> <tc地址|名片> 把朋友存进通讯录（对方名片 token 可直接贴）',
   '  book remove <昵称>          从通讯录删除',
   '  book [list]                 查看通讯录',
+  '  card [show] [--nick X]      生成/展示本端名片（一条 token 分享给别人）',
+  '  card import <token|文件> [--nick X] [--force]',
+  '                              导入别人名片 → 自动进通讯录（一键加联系人）',
   '',
   '监听（本端起服务，地址自动用稳定身份，不会变）:',
   '  chat [--name X]             聊天监听（连上后双向打字；一次性会话）',
@@ -148,6 +151,8 @@ function isP2PTarget(t) {
 exports.isP2PTarget = isP2PTarget;
 exports.wantP2PSend = (args) => isP2PTarget(args && args[0]);
 exports.wantP2PGet = (args) => isP2PTarget(args && args[0]);
+exports.parseCard = parseCard;
+exports.makeCard = makeCard;
 
 /** 昵称/地址 → 地址。昵称走通讯录（精确 + 唯一子串兜底） */
 function resolveTarget(target) {
@@ -182,9 +187,15 @@ exports.bookCmd = async (args) => {
   }
   if (sub === 'add') {
     const nick = args[1];
-    const addr = args[2];
-    if (!nick || !addr) { console.log('[zhixia] 用法: zhixia book add <昵称> <tc地址>'); process.exit(1); }
-    if (!/^tc[A-Za-z0-9_-]+$/.test(addr)) { console.log('[zhixia] ✗ "' + addr + '" 不是合法 tc 地址（应以 tc 开头，完整粘贴）'); process.exit(1); }
+    let addr = args[2];
+    if (!nick || !addr) { console.log('[zhixia] 用法: zhixia book add <昵称> <tc地址|名片token>'); process.exit(1); }
+    // 名片 token 兼容：zcard1.xxx（甚至自由文本里夹带）直接提取
+    const c = parseCard(addr);
+    if (c) {
+      addr = c.addr;
+      if (c.nick && c.via === '名片') console.log('[zhixia] 名片自带昵称 "' + c.nick + '"，用你指定的 "' + nick + '" 入库');
+    }
+    if (!/^tc[A-Za-z0-9_-]+$/.test(addr)) { console.log('[zhixia] ✗ "' + addr + '" 不是合法 tc 地址（应以 tc 开头，完整粘贴；或直接贴对方名片）'); process.exit(1); }
     book[nick] = { address: addr, ts: Date.now() };
     saveBook(book);
     console.log('[zhixia] ✓ 已添加 ' + nick + ' → ' + addr);
@@ -201,6 +212,94 @@ exports.bookCmd = async (args) => {
   }
   console.log('[zhixia] 未知 book 子命令: ' + sub);
   console.log('用法: zhixia book [list] | add <昵称> <tc地址> | remove <昵称>');
+  process.exit(1);
+};
+
+// ---------- 名片（分享 = 一条 token 让对方一键入通讯录） ----------
+// 名片 token：zcard1.<base64url(JSON {v, nick, addr})>
+// 内容只有公开信息（昵称 + 稳定地址，地址本来就是拿来分享的），无隐私材料。
+// 对方 zhixia card import <token> 一条命令进通讯录；AI agent 同样会读。
+const CARD_PREFIX = 'zcard1.';
+
+function b64url(buf) {
+  return buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+function b64urlDec(s) {
+  s = String(s).replace(/-/g, '+').replace(/_/g, '/');
+  while (s.length % 4) s += '=';
+  return Buffer.from(s, 'base64');
+}
+
+/** 生成名片：{ token, nick, addr } */
+function makeCard(nick, addr) {
+  const payload = JSON.stringify({ v: 1, nick: String(nick || '').trim(), addr });
+  return CARD_PREFIX + b64url(Buffer.from(payload, 'utf8'));
+}
+
+/** 解析名片：接受 zcard1 token / 裸 tc 地址 / 含 token 的自由文本。返回 { nick?, addr, via } 或 null */
+function parseCard(text) {
+  const s = String(text || '').trim();
+  const m = s.match(/(zcard1\.[A-Za-z0-9_-]+)/);
+  if (m) {
+    try {
+      const obj = JSON.parse(b64urlDec(m[1].slice(CARD_PREFIX.length)).toString('utf8'));
+      if (!obj || obj.v !== 1 || !/^tc[A-Za-z0-9_-]{20,}$/.test(String(obj.addr || ''))) return null;
+      return { nick: String(obj.nick || '').trim() || null, addr: obj.addr, via: '名片' };
+    } catch (e) { return null; }
+  }
+  if (/^tc[A-Za-z0-9_-]{20,}$/.test(s)) return { nick: null, addr: s, via: '裸地址' };
+  return null;
+}
+
+exports.cardCmd = async (args) => {
+  const sub = args[0];
+  if (!sub || sub === 'show') {
+    const id = await ensureIdentity();
+    const nick = pickFlag(args.slice(1), ['--nick', '-n']) || 'me';
+    const token = makeCard(nick, id.address);
+    console.log('┌────────────────────────────────────────┐');
+    console.log('│ zhixia P2P 名片（发给对方即可）       │');
+    console.log('└────────────────────────────────────────┘');
+    console.log('昵称: ' + nick);
+    console.log('稳定地址: ' + id.address);
+    console.log('');
+    console.log('名片 token（复制发给对方，他跑 zhixia card import 即可）:');
+    console.log('');
+    console.log(token);
+    console.log('');
+    console.log('（也可让对方直接: zhixia book add ' + nick + ' ' + id.address + '）');
+    return;
+  }
+  if (sub === 'import') {
+    let src = args[1];
+    if (!src) { console.log('[zhixia] 用法: zhixia card import <名片token|文件路径> [--nick X] [--force]'); process.exit(1); }
+    // 支持从文件读名片
+    if (src.length < 200 && fs.existsSync(src)) src = fs.readFileSync(src, 'utf8');
+    const card = parseCard(src);
+    if (!card) {
+      console.log('[zhixia] ✗ 无法解析名片（需 zcard1. token 或 tc 稳定地址；粘贴自由文本也行，会从中提取）');
+      process.exit(1);
+    }
+    const force = args.includes('--force');
+    const nick = pickFlag(args, ['--nick', '-n']) || card.nick;
+    if (!nick) {
+      console.log('[zhixia] 名片里没有昵称（或你没指定 --nick），用 --nick 指定一个，例如: zhixia card import ' + card.addr + ' --nick ' + (card.via === '裸地址' ? '朋友' : ''));
+      process.exit(1);
+    }
+    const book = loadBook();
+    if (book[nick] && book[nick].address !== card.addr && !force) {
+      console.log('[zhixia] ✗ 通讯录里已有 "' + nick + '" → ' + book[nick].address);
+      console.log('        新名片地址不同。确认要覆盖请加 --force: zhixia card import ... --nick ' + nick + ' --force');
+      process.exit(1);
+    }
+    book[nick] = { address: card.addr, ts: Date.now() };
+    saveBook(book);
+    console.log('[zhixia] ✓ 已导入名片 → 通讯录新增/更新 ' + nick + ' → ' + card.addr);
+    console.log('        现在可以: zhixia send ' + nick + ' "hi"');
+    return;
+  }
+  console.log('[zhixia] 未知 card 子命令: ' + sub);
+  console.log('用法: zhixia card [show] [--nick X] | import <token|文件> [--nick X] [--force]');
   process.exit(1);
 };
 
@@ -460,6 +559,9 @@ exports.main = (argv) => {
       break;
     case 'book':
       p = exports.bookCmd(rest);
+      break;
+    case 'card':
+      p = exports.cardCmd(rest);
       break;
     case 'chat':
       p = exports.chat({ name: pickFlag(rest, ['--name', '-n']) });

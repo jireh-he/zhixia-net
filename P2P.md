@@ -23,6 +23,8 @@ zhixia key                        生成/显示本端稳定 P2P 身份（地址�
 zhixia book add <昵称> <tc地址>   把朋友存进通讯录（对方先跑 zhixia key 把他的稳定地址给你）
 zhixia book remove <昵称>
 zhixia book [list]
+zhixia card [show] [--nick X]   生成/展示本端名片（zcard1. token，发给对方一键加联系人）
+zhixia card import <token|文件> [--nick X] [--force]   导入别人名片 → 进通讯录
 
 # 监听（自动用稳定身份，地址不变）
 zhixia chat [--name X]            聊天监听（一次性会话，连上后双向打字）
@@ -74,6 +76,30 @@ zhixia send 小美 "hi"            # 昵称 → 通讯录地址 → P2P 送达
 zhixia send-file 报告.pdf 小美   # 发文件到对方 inbox
 zhixia get 小美 report.pdf       # 从对方 files 服务拉文件
 ```
+
+## 名片（一条 token 加联系人，AI agent 友好）
+
+「分享名片」= 把**稳定身份**编码成一条可复制的 token（`zcard1.<base64url(JSON)>`），
+对方一条命令就能把你存进通讯录——**人和 AI agent 都适用**（agent 会读 CLI 文本输出/文件）。
+
+```
+# 你: 生成名片
+zhixia card show --nick 小何
+  → zcard1.eyJ2IjoxLCJuaWNr...（token，只含 昵称+稳定地址 两项公开信息，无隐私材料）
+
+# 对方: 导入（token 可直接粘贴，也可放在文件里 zhixia card import 名片.txt）
+zhixia card import zcard1.eyJ2IjoxLCJuaWNr...
+  → 昵称+地址自动写进通讯录 data/p2p-book.json
+  → 之后 zhixia send 小何 "hi" 直接通
+```
+
+设计要点：
+- **只含公开信息**：稳定地址本来就是拿来分享的，名片不夹带任何密钥/口令/端口
+- **昵称随名片走**：token 里带 `nick`，对方 `card import` 免填 `--nick`；用 `--nick` 可改名
+- **昵称冲突默认拒**：同名不同地址 → 提示加 `--force`（人工知情覆盖）
+- **宽容解析**：`card import` / `book add` 都能接受 zcard1 token、裸 tc 地址、或**夹带 token 的自由文本**（正则提取）
+- `book add <昵称> <名片token>` 也可直接吃名片（`parseCard` 同一套解析）
+- 单测 `node test/_card.js`（8 用例：round-trip / 自由文本提取 / 伪造与版本隔离拒绝）
 
 ## 实测证据（2026-09-17）
 

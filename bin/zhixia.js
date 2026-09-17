@@ -6,7 +6,7 @@
 // ========== P2P 顶层命令（第四传输层，不套中间层） ==========
 // P2P 专有命令（与 MVP 层不撞名）直接走独立解析器
 // （yargs strict 模式与 variadic positional 不兼容，且 ato Node 16 上保持零 yargs 依赖路径）
-const P2P_OWN = ['key', 'book', 'chat', 'inbox', 'files', 'listen', 'send-file', 'last', 'ls', 'ping'];
+const P2P_OWN = ['key', 'book', 'chat', 'inbox', 'files', 'listen', 'card', 'send-file', 'last', 'ls', 'ping'];
 if (P2P_OWN.includes(process.argv[2])) {
   const p2p = require('../src/cli/commands/p2p-cmd');
   p2p.main(process.argv.slice(2));
