@@ -34,6 +34,7 @@ const KEY_DIR = path.join(os.homedir(), '.config', 'tailcat', 'keys');
 
 // P2P 专有命令（与 MVP 层无冲突，bin/zhixia.js 直接拦截这些词）
 const P2P_OWN = ['key', 'book', 'chat', 'inbox', 'files', 'listen', 'card', 'send-file', 'last', 'ls', 'ping'];
+exports.P2P_OWN = P2P_OWN;
 
 const USAGE = [
   'zhixia P2P 顶层命令（第四传输层，昵称自动匹配地址）:',
@@ -50,7 +51,7 @@ const USAGE = [
   '监听（本端起服务，地址自动用稳定身份，不会变）:',
   '  chat [--name X]             聊天监听（连上后双向打字；一次性会话）',
   '  inbox [dir]                 文件收件箱（write-only，默认 ./zhixia-inbox）',
-  '  files [dir] [--rw]          文件服务（SFTP，默认只读）',
+  '  files [dir] [--rw]          文件服务（SFTP，默认只读，默认目录 share/ 白名单）',
   '  listen [--inbox-dir D] [--files-dir D] [--rw] [--only chat,files]',
   '                              三合一接收服务：chat+inbox+files 同一进程',
   '                              （接收端后台只挂这一个；kill 该 PID 全停）',
@@ -343,7 +344,9 @@ exports.inbox = async (args = {}) => {
 
 exports.files = async (args = {}) => {
   const { id, opts } = await withKey({});
-  const dir = args.dir || process.cwd();
+  // 默认 share/ 白名单目录，不是整仓——避免把 src/test/文档 里的敏感文件暴露给对端
+  const dir = args.dir || path.join(process.cwd(), 'share');
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   // 启动前浅扫描：对方可枚举到哪些敏感文件 → 预警
   const hits = guard.scanDir(dir);
   if (hits.length) {
@@ -371,8 +374,10 @@ exports.files = async (args = {}) => {
 exports.listen = async (args = {}) => {
   const { id } = await withKey({});
   const inboxDir = args.inboxDir || path.join(process.cwd(), 'zhixia-inbox');
-  const filesDir = args.filesDir || process.cwd();
+  // 默认 share/ 白名单目录，不是整仓——避免把 src/test/文档 里的敏感文件暴露给对端
+  const filesDir = args.filesDir || path.join(process.cwd(), 'share');
   if (!fs.existsSync(inboxDir)) fs.mkdirSync(inboxDir, { recursive: true });
+  if (!fs.existsSync(filesDir)) fs.mkdirSync(filesDir, { recursive: true });
 
   // files 路：服务目录先过 guard 浅扫描（与 files 命令同口径）
   const hits = guard.scanDir(filesDir);
