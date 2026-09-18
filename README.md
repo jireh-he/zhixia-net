@@ -59,7 +59,7 @@ node --no-warnings bin/zhixia.js listen --files-dir ./servedir
 | `zhixia send-file <文件...> <昵称\|地址>` | 传文件（默认经隐私护栏） |
 | `zhixia get <昵称\|地址> <远端文件>` / `ls` / `ping` | 拉文件 / 列目录 / 连通性 |
 
-完整命令表、智能路由（`send`/`get` 按目标形态分流 P2P vs 构想层）见 **[P2P.md](./P2P.md)**；双机手工验收 T1–T9 见 **[HANDTEST.md](./HANDTEST.md)**；协作者上手见 **[ONBOARDING.md](./ONBOARDING.md)**。
+完整命令表、CLI 入口说明（P2P-only 默认入口 + `zhixia-mvp.js` 旧全量入口）见 **[P2P.md](./P2P.md)**；双机手工验收 T1–T9 见 **[HANDTEST.md](./HANDTEST.md)**；协作者上手见 **[ONBOARDING.md](./ONBOARDING.md)**。
 
 ### 隐私护栏（`src/privacy/guard.js`，`send-file` 默认生效）
 

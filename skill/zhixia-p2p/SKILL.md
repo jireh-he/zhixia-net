@@ -36,6 +36,8 @@ ZHIXIA_HOME=$HOME/.zhixia sh skill/zhixia-p2p/install.sh
 
 ```sh
 cd <repo> && node --no-warnings bin/zhixia.js <cmd>
+# 注：bin/zhixia.js 现为 P2P-only 入口（key/book/card/chat/inbox/files/listen/send/send-file/get/ls/ping/last）；
+# MVP 层命令走旧全量入口 bin/zhixia-mvp.js（实现未删，仅入口分离）。
 # 建议 alias：zx() { node --no-warnings <repo>/bin/zhixia.js "$@"; }
 ```
 
@@ -50,7 +52,7 @@ cd <repo> && node --no-warnings bin/zhixia.js <cmd>
 | `zhixia book [list]` / `book remove <昵称>` | 查看/删除通讯录 | — |
 | `zhixia chat [--name X]` | 聊天监听（双向打字终端） | — |
 | `zhixia inbox [dir]` | 文件收件箱（write-only，默认 ./zhixia-inbox） | — |
-| `zhixia files [dir] [--rw]` | 文件服务（SFTP，默认只读；启动前自动预警目录内敏感文件） | — |
+| `zhixia files [dir] [--rw]` | 文件服务（SFTP，默认只读，**默认目录 share/ 白名单不暴露整仓**；启动前自动预警目录内敏感文件） | — |
 | `zhixia listen [--inbox-dir D] [--files-dir D] [--rw] [--only chat,inbox,files]` | 三合一接收服务（chat+inbox+files 同一进程，kill 父 PID 全停） | — |
 | `zhixia send <昵称\|地址> <文本>` | 发聊天消息（昵称自动匹配通讯录） | 对方开着 chat |
 | `zhixia send-file <文件...> <昵称\|地址> [-r] [--force]` | 发文件到对方收件箱（**隐私护栏默认拦截敏感文件**） | 对方开着 inbox |

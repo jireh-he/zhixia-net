@@ -76,7 +76,8 @@ node --no-warnings bin/zhixia.js listen --files-dir ./servedir   # 三合一接�
 - 修 bug 后：最小可复现 + 全 CLI 命令冒烟（≥12 命令 PASS）
 - 单测：`node test/_privacy_guard.js`（15 用例）· `node test/_card.js`（8 用例）
 - 双机实测照 `HANDTEST.md` T1–T9
-- `zhixia test` — 一键自检（Identity→Network→Discovery→Message→Storage→Skill）
+- CLI 入口：`bin/zhixia.js` 现为 P2P-only（MVP 命令走 `bin/zhixia-mvp.js`，实现未删）
+- `zhixia test` 属 MVP 层，入口走 `node --no-warnings bin/zhixia-mvp.js test`（一键自检 Identity→Network→Discovery→Message→Storage→Skill）
 
 ## 贡献流程
 

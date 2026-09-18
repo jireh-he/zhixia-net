@@ -29,7 +29,7 @@ zhixia card import <token|文件> [--nick X] [--force]   导入别人名片 → 
 # 监听（自动用稳定身份，地址不变）
 zhixia chat [--name X]            聊天监听（一次性会话，连上后双向打字）
 zhixia inbox [dir]               文件收件箱（write-only drop box，默认 ./zhixia-inbox）
-zhixia files [dir] [--rw]        文件服务（SFTP，默认只读）
+zhixia files [dir] [--rw]        文件服务（SFTP，默认只读；默认目录 share/ 白名单，不暴露整仓）
 zhixia listen [--inbox-dir D] [--files-dir D] [--rw] [--only chat,files]
                                  三合一接收服务：chat+inbox+files 同一进程
                                  （接收端后台只挂这一个；kill 该 PID 全停）
@@ -45,17 +45,13 @@ zhixia ping <昵称|地址>
 zhixia last                      显示本端稳定地址
 ```
 
-## send / get 与 MVP 层同名 → 智能路由
+## CLI 入口（2026-09-18 起：命令表面 P2P-only）
 
-`zhixia send` / `zhixia get` 与 MVP 层命令（`send <zid> <msg>`、`get <cid>`）同名。
-`bin/zhixia.js` 顶部按**目标形态**分流：
+`bin/zhixia.js` 现在**只挂 P2P 层**（key/book/card/chat/inbox/files/listen/send/send-file/get/ls/ping/last）。
+MVP 层命令（init/status/online/peers/publish/...）已从默认入口撤下——实现代码未删（`src/cli/commands/`），
+旧全量入口保留为 **`bin/zhixia-mvp.js`**，需要时 `node --no-warnings bin/zhixia-mvp.js <MVP命令>`。
 
-| 目标形态 | 路由到 |
-|---|---|
-| `tc...` 长地址 / 通讯录里已有昵称 | P2P（tailcat 引擎） |
-| `zid:...` / 短 CID | MVP（消息层 / 分布式存储层） |
-
-其余 P2P 专有词（`key/book/chat/inbox/files/send-file/last/ls/ping`）与 MVP 不撞名，直接顶层拦截。
+`zhixia send` / `zhixia get` 目标统一按 P2P 处理：**tc 长地址或通讯录昵称**（`zid:`/CID 不再是目标形态，会报「不是合法目标」）。
 
 ## 核心设计：稳定身份 + 通讯录
 
@@ -119,7 +115,7 @@ AI agent 作为代理使用 zhixia 时的硬性规矩（与隐私护栏同级，
 | 顶层 `send-file` / inbox | ✓ 文件送达（drop box 加时间戳后缀） |
 | 顶层 `files` + `ls` + `get` | ✓ 列目录 + 拉取，内容一致 |
 | 顶层 `ping` | ✓ **IPv6 直连 1.8ms**（magicsock 打洞，非 DERP 中继） |
-| `send zid:...` / `get <cid>` 路由 | ✓ 正确分流到 MVP 层，不崩 |
+| `send`/`get` 目标形态 | ✓ 非 tc 目标/非通讯录昵称直接拒绝（MVP 路由已撤） |
 | 稳定身份 | ✓ 同 key 每次起监听打印的地址完全一致 |
 
 ## 行为注意
