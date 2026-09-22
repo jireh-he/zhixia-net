@@ -10,7 +10,7 @@
 - **唯一保留的传输底座 = tailcat**（P2P 层，已双机实测）。tailcat 之上的新能力逐步验证后再合入。
 - 原 zhixia 的非 tailcat 设计（DHT 发现、分布式存储、信誉/治理/经济/市场、三级连接策略、
   Cloudflare 信令实验等）一律进本目录，不再作为活跃设计维护。
-- 已验证的 P2P 能力已独立到 **`github.com/jireh-he/fengyu-p2p`（风语）**，含 agent skill 包。
+- 已验证的 P2P 能力已独立到 **`github.com/jireh-he/fengyu`（风语）**，含 agent skill 包。
 
 ## 目录对照
 
@@ -26,11 +26,11 @@
 | `storage/` | 蓝图 SQL schema（017–036） | 未验证 |
 | `deployment/` | docker 部署蓝图 | 未验证 |
 | `manifest/` | package*.json（MVP 依赖） | P2P 零 npm，不需要 |
-| `skill-zhixia-p2p/` | 旧 skill 包（指向 zhixia） | 已被 `fengyu-p2p` 仓库取代 |
+| `skill-zhixia-p2p/` | 旧 skill 包（指向 zhixia） | 已被 `fengyu` 仓库取代 |
 | `test-v12-integration.js` | MVP 集成测试 | 依赖 MVP |
 
 ## 仍在活动面的（非归档）
 
 - `bin/zhixia.js` + `src/cli/commands/p2p-cmd.js` + `src/tailcat/adapter.js` + `src/privacy/guard.js`
-  — P2P 已验证层（注意：此四件套的独立演进版在 fengyu-p2p 仓库）
+  — P2P 已验证层（注意：此四件套的独立演进版在 fengyu 仓库）
 - `P2P.md` / `ONBOARDING.md` / `README.md` / `share/` / `test/_card.js` / `test/_privacy_guard.js`

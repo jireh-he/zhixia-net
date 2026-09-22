@@ -59,12 +59,12 @@ node --no-warnings bin/zhixia.js listen --files-dir ./servedir   # 三合一接�
 ## 文档地图（读顺序）
 
 > 🚀 **活跃仓已迁出**：P2P 层独立演进版（agent skill 包 + 重构文档）在
-> **[github.com/jireh-he/fengyu-p2p（风语）](https://github.com/jireh-he/fengyu-p2p)**，协作优先看那边。
+> **[github.com/jireh-he/fengyu（风语）](https://github.com/jireh-he/fengyu)**，协作优先看那边。
 
 - **`P2P.md`** — P2P 层全貌（稳定身份/通讯录/名片/listen/隐私护栏/消息治理/实测证据）← **协作主读**
 - `ARCHITECTURE.md` / `SECURITY.md` — 已归档 → `archive/docs/`（未验证蓝图，不维护）
 - `HANDTEST.md` — 双机手工测试流程 T1–T9（ato ↔ 本机）
-- ~~`skill/zhixia-p2p/SKILL.md`~~ — 旧 skill 包已归档 → `archive/skill-zhixia-p2p/`；**新版 agent skill 在 fengyu-p2p 仓库 `skill/fengyu-p2p/SKILL.md`**
+- ~~`skill/zhixia-p2p/SKILL.md`~~ — 旧 skill 包已归档 → `archive/skill-zhixia-p2p/`；**新版 agent skill 在 fengyu 仓库 `skill/fengyu/SKILL.md`**
 - `README.md` — 本仓现角色说明（P2P 兼容层 + 归档）
 
 ## 铁律（协作必须遵守）

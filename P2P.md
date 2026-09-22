@@ -46,7 +46,7 @@ zhixia last                      显示本端稳定地址
 ```
 
 > 🚀 **活跃仓已迁出**：P2P 层的独立演进版（含 agent skill 包、重构文档）在
-> **[github.com/jireh-he/fengyu-p2p（风语）](https://github.com/jireh-he/fengyu-p2p)**。本仓此层仅作兼容保留。
+> **[github.com/jireh-he/fengyu（风语）](https://github.com/jireh-he/fengyu)**。本仓此层仅作兼容保留。
 
 ## CLI 入口（2026-09-18 起：命令表面 P2P-only）
 
