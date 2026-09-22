@@ -45,11 +45,15 @@ zhixia ping <昵称|地址>
 zhixia last                      显示本端稳定地址
 ```
 
+> 🚀 **活跃仓已迁出**：P2P 层的独立演进版（含 agent skill 包、重构文档）在
+> **[github.com/jireh-he/fengyu-p2p（风语）](https://github.com/jireh-he/fengyu-p2p)**。本仓此层仅作兼容保留。
+
 ## CLI 入口（2026-09-18 起：命令表面 P2P-only）
 
 `bin/zhixia.js` 现在**只挂 P2P 层**（key/book/card/chat/inbox/files/listen/send/send-file/get/ls/ping/last）。
-MVP 层命令（init/status/online/peers/publish/...）已从默认入口撤下——实现代码未删（`src/cli/commands/`），
-旧全量入口保留为 **`bin/zhixia-mvp.js`**，需要时 `node --no-warnings bin/zhixia-mvp.js <MVP命令>`。
+MVP 层命令（init/status/online/peers/publish/...）已从默认入口撤下；
+旧全量入口与实现代码**已归档屏蔽** → `archive/bin-zhixia-mvp.js` + `archive/src-blueprint/cli-commands-*.js`
+（需时从 git 历史或 archive/ 取回，取回后先独立验证）。
 
 `zhixia send` / `zhixia get` 目标统一按 P2P 处理：**tc 长地址或通讯录昵称**（`zid:`/CID 不再是目标形态，会报「不是合法目标」）。
 

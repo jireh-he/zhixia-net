@@ -58,12 +58,14 @@ node --no-warnings bin/zhixia.js listen --files-dir ./servedir   # 三合一接�
 
 ## 文档地图（读顺序）
 
+> 🚀 **活跃仓已迁出**：P2P 层独立演进版（agent skill 包 + 重构文档）在
+> **[github.com/jireh-he/fengyu-p2p（风语）](https://github.com/jireh-he/fengyu-p2p)**，协作优先看那边。
+
 - **`P2P.md`** — P2P 层全貌（稳定身份/通讯录/名片/listen/隐私护栏/消息治理/实测证据）← **协作主读**
-- `ARCHITECTURE.md` — MVP 层（v1.0）整体架构
-- `SECURITY.md` — 安全设计
+- `ARCHITECTURE.md` / `SECURITY.md` — 已归档 → `archive/docs/`（未验证蓝图，不维护）
 - `HANDTEST.md` — 双机手工测试流程 T1–T9（ato ↔ 本机）
-- `skill/zhixia-p2p/SKILL.md` — 可移植 agent skill（装到任何 AI agent 都带隐私护栏 + 消息治理红线）
-- `README.md` — MVP 层（v1.0 Beta）
+- ~~`skill/zhixia-p2p/SKILL.md`~~ — 旧 skill 包已归档 → `archive/skill-zhixia-p2p/`；**新版 agent skill 在 fengyu-p2p 仓库 `skill/fengyu-p2p/SKILL.md`**
+- `README.md` — 本仓现角色说明（P2P 兼容层 + 归档）
 
 ## 铁律（协作必须遵守）
 
@@ -76,8 +78,8 @@ node --no-warnings bin/zhixia.js listen --files-dir ./servedir   # 三合一接�
 - 修 bug 后：最小可复现 + 全 CLI 命令冒烟（≥12 命令 PASS）
 - 单测：`node test/_privacy_guard.js`（15 用例）· `node test/_card.js`（8 用例）
 - 双机实测照 `HANDTEST.md` T1–T9
-- CLI 入口：`bin/zhixia.js` 现为 P2P-only（MVP 命令走 `bin/zhixia-mvp.js`，实现未删）
-- `zhixia test` 属 MVP 层，入口走 `node --no-warnings bin/zhixia-mvp.js test`（一键自检 Identity→Network→Discovery→Message→Storage→Skill）
+- CLI 入口：`bin/zhixia.js` 现为 P2P-only；MVP 命令入口与实现**已归档屏蔽** → `archive/bin-zhixia-mvp.js` + `archive/src-blueprint/cli-commands-*.js`（取回后先独立验证）
+- `zhixia test`（一键自检 Identity→Network→Discovery→Message→Storage→Skill）属 MVP 层，已随蓝图归档，本仓 P2P 层不再提供；P2P 自检走 `node test/_card.js` + `node test/_privacy_guard.js`
 
 ## 贡献流程
 
